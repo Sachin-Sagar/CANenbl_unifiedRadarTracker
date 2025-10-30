@@ -1,0 +1,26 @@
+[build-system]
+requires = ["uv >= 0.1.16", "uv_build"]
+build-backend = "uv_build"
+
+[project]
+name = "canenbl-unifiedradartrcker"
+version = "0.1.0"
+description = "A high-performance, real-time CAN signal logger and radar tracker."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "python-can",
+    "cantools",
+    "canlib",
+    "numpy",
+    "pyserial",
+    "PyQt5",
+    "pyqtgraph",
+    "scipy",
+    "psutil",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
