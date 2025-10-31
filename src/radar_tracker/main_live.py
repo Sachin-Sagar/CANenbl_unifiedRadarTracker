@@ -21,8 +21,8 @@ from .tracking.update_and_save_history import update_and_save_history
 from .live_visualizer import LiveVisualizer
 from .json_logger import DataLogger
 from .console_logger import setup_logging
-from ..can_service.live_can_manager import LiveCANManager
-from ... import config as root_config
+from can_service.live_can_manager import LiveCANManager
+import config as root_config
 from .tracking.utils.coordinate_transforms import interp_with_extrap
 
 

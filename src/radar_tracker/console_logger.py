@@ -2,12 +2,18 @@
 
 import logging
 from datetime import datetime
+import os  # <-- 1. Import the os module
 
 def setup_logging():
     """
     Configures logging to output to the console and a plain text file.
     """
-    log_filename_txt = f"output/console_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    # --- 2. Create the output directory if it doesn't exist ---
+    output_dir = "output"
+    os.makedirs(output_dir, exist_ok=True)
+    # --------------------------------------------------------
+
+    log_filename_txt = os.path.join(output_dir, f"console_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
 
     # --- Create Handlers ---
     # 1. Console Handler (for live viewing)

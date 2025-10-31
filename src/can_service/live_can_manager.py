@@ -25,6 +25,7 @@ class LiveCANManager:
         self.can_reader_thread = None
         self.processing_workers = []
         self.buffer_filler_thread = None
+        self.bus = None  # <-- THIS IS THE FIX
         self._is_running = threading.Event()
 
     def start(self):

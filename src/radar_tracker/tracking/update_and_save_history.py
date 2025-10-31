@@ -4,7 +4,7 @@ import json
 import numpy as np
 import logging
 import scipy.io as sio
-from src.tracking.export_to_json import create_visualization_data
+from .export_to_json import create_visualization_data
 
 class NumpyEncoder(json.JSONEncoder):
     """ Custom encoder for numpy data types """
