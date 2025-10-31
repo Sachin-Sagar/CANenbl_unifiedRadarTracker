@@ -10,6 +10,11 @@ import platform
 # We assume a PCAN adapter is being used.
 
 CAN_BITRATE = 500000
+
+# --- GPIO Settings (for Raspberry Pi) ---
+BUTTON_PIN = 17
+
+
 OS_SYSTEM = platform.system()
 
 if OS_SYSTEM == "Windows":

@@ -5,6 +5,7 @@ import platform
 import subprocess
 
 # Add the 'src' directory to the Python path
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
 if platform.system() == "Linux":
@@ -29,14 +30,50 @@ if platform.system() == "Linux":
 from radar_tracker.main import main as radar_main
 from radar_tracker.console_logger import setup_logging
 from datetime import datetime
+from can_logger_app.gpio_handler import init_gpio, wait_for_switch_on, check_for_switch_off, cleanup_gpio, turn_on_led, turn_off_led
+import platform
+import threading
+import multiprocessing
+from can_logger_app.main import main as can_logger_main
 
 if __name__ == '__main__':
+    multiprocessing.freeze_support()
     # Create a timestamped output directory
     output_dir = os.path.join("output", datetime.now().strftime('%Y%m%d_%H%M%S'))
     os.makedirs(output_dir, exist_ok=True)
 
     # Configure logging for the entire application
     setup_logging(output_dir)
-    
-    # Launch the radar application
-    radar_main(output_dir)
+
+    # If on Raspberry Pi, wait for switch to be turned on
+    if platform.system() == "Linux":
+        shutdown_flag = threading.Event()
+        stop_event = threading.Event()
+        can_logger_process = None
+        try:
+            init_gpio()
+            wait_for_switch_on()
+            turn_on_led()
+
+            # Start the CAN logger in a separate process
+            can_logger_process = multiprocessing.Process(target=can_logger_main)
+            can_logger_process.start()
+
+            # Start the stop signal checker in a separate thread
+            stop_thread = threading.Thread(target=check_for_switch_off, args=(stop_event, shutdown_flag))
+            stop_thread.start()
+
+            # Launch the radar application
+            radar_main(output_dir, shutdown_flag)
+        finally:
+            stop_event.set()
+            if can_logger_process and can_logger_process.is_alive():
+                can_logger_process.terminate()
+                can_logger_process.join()
+            if platform.system() == "Linux":
+                turn_off_led()
+            cleanup_gpio()
+    else:
+        # Launch the radar application directly on other systems
+        radar_main(output_dir)
+

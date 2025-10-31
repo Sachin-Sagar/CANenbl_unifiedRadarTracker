@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-10-31
+
+### Added
+
+- **GPIO-Based Hardware Interaction (Raspberry Pi):** Implemented a comprehensive set of features for running the application on a Raspberry Pi with physical controls.
+    - **Switch-Triggered Start:** The application will now wait for a physical switch to be turned ON on a designated GPIO pin before starting the logging and tracking process. This allows for headless operation and control without a keyboard or SSH session.
+    - **Switch-OFF to Stop:** The application can be gracefully shut down by turning the physical switch OFF. This provides a convenient way to stop logging and save all data correctly.
+    - **Onboard LED Feedback:** The Raspberry Pi's onboard activity LED is used to provide visual feedback to the user:
+        - The LED stays **continuously ON** to indicate that the application has successfully started and is actively logging data.
+        - The LED turns **OFF** upon shutdown to confirm that the task has been completed and all processes have terminated cleanly.
+
+### Fixed
+
+- **CAN Log Not Saved:** Resolved an issue where the CAN log was not being saved as a JSON file. The `main.py` script now correctly launches the CAN logger in a separate process, ensuring that CAN data is logged to a timestamped JSON Lines file.
+
 ## [1.1.0] - 2025-10-31
 
 ### Added

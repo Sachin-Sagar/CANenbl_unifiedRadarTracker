@@ -163,3 +163,22 @@ This section tracks the progress of merging the `Read_CAN_RT_strip` and `Unified
 *   [x] **Task 4.2: Modify `src/radar_tracker/main.py`**
     *   [x] Use relative imports.
     *   [x] (Optional) Remove `setup_logging()` call.
+
+### Phase 5: GPIO Integration (Completed)
+
+*   [x] **Task 5.1: Implement GPIO Handler**
+    *   [x] Created `src/can_logger_app/gpio_handler.py` to encapsulate GPIO logic.
+    *   [x] Added `RPi.GPIO` dependency to `pyproject.toml`.
+    *   [x] Defined `BUTTON_PIN` in `config.py`.
+    *   [x] Modified `gpio_handler.py` to control the onboard LED (`turn_on_led`, `turn_off_led`).
+    *   [x] Modified `gpio_handler.py` to detect switch ON (`wait_for_switch_on`) and switch OFF (`check_for_switch_off`).
+*   [x] **Task 5.2: Integrate GPIO into Main Application**
+    *   [x] Modified root `main.py` to initialize GPIO, wait for the switch to be ON, turn on the LED, and handle graceful shutdown via a `shutdown_flag` and a separate thread for `check_for_switch_off`.
+    *   [x] Modified `src/radar_tracker/main.py` to accept and pass the `shutdown_flag` to `main_live`.
+    *   [x] Modified `src/radar_tracker/main_live.py` to respect the `shutdown_flag` for graceful termination.
+    *   [x] Added a final onboard LED turn OFF in `main.py` to indicate task completion upon shutdown.
+
+### Phase 6: CAN Logger Integration (Completed)
+
+*   [x] **Task 6.1: Integrate CAN Logger into Main Application**
+    *   [x] Modified root `main.py` to launch the `can_logger_app.main` in a separate multiprocessing process, ensuring CAN data is logged to a JSON file in parallel with the radar tracker.

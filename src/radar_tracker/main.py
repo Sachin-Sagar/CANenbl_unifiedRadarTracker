@@ -1,7 +1,7 @@
 import sys
 from .console_logger import setup_logging
 
-def main(output_dir):
+def main(output_dir, shutdown_flag=None):
     """
     Main entry point for the Unified Radar Tracker application.
     Allows the user to select between live tracking and playback mode.
@@ -19,7 +19,7 @@ def main(output_dir):
         print("\nStarting in LIVE mode...")
         # We import here to avoid PyQt5 dependency if only running playback
         from .main_live import main as main_live
-        main_live(output_dir)
+        main_live(output_dir, shutdown_flag)
     elif mode == '2':
         print("\nStarting in PLAYBACK mode...")
         from .main_playback import run_playback

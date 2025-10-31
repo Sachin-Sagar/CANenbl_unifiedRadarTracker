@@ -70,7 +70,7 @@ class RadarWorker(QObject):
     finished = pyqtSignal()
     close_visualizer = pyqtSignal()
 
-    def __init__(self, cli_com_port, config_file, output_dir):
+    def __init__(self, cli_com_port, config_file, output_dir, shutdown_flag=None):
         super().__init__()
         self.cli_com_port = cli_com_port
         self.config_file = config_file
@@ -82,6 +82,7 @@ class RadarWorker(QObject):
         self.fhist_history = []
         self.logger_thread = None
         self.data_logger = None
+        self.shutdown_flag = shutdown_flag
         
         # Initialize CAN Manager
         dbc_path = os.path.join(root_config.INPUT_DIRECTORY, root_config.DBC_FILE)
@@ -102,6 +103,11 @@ class RadarWorker(QObject):
         # Start CAN service
         self.can_manager.start()
 
+        # If on Raspberry Pi, blink LED to indicate successful start
+        if platform.system() == "Linux":
+            from can_logger_app.gpio_handler import blink_onboard_led
+            blink_onboard_led(3)
+
         self.params_radar, self.h_data_port = self._configure_sensor()
         if not self.params_radar or not self.h_data_port:
             logging.error("Failed to configure sensor. Exiting worker thread.")
@@ -115,6 +121,10 @@ class RadarWorker(QObject):
 
         logging.info("--- Starting Live Tracking ---")
         while self.is_running:
+            if self.shutdown_flag and self.shutdown_flag.is_set():
+                self.is_running = False
+                continue
+
             frame_data = read_and_parse_frame(self.h_data_port, self.params_radar)
             if not frame_data or not frame_data.header:
                 continue
@@ -228,7 +238,7 @@ class RadarWorker(QObject):
             self.h_data_port.close()
             logging.info("--- Serial port closed ---")
 
-def main(output_dir):
+def main(output_dir, shutdown_flag=None):
     """Main application entry point."""
     # --- THIS IS THE FIX ---
     # The setup_logging() call is removed from here to prevent double-logging.
@@ -236,7 +246,7 @@ def main(output_dir):
     # --- END OF FIX ---
     app = QApplication(sys.argv)
     worker_thread = QThread()
-    radar_worker = RadarWorker(CLI_COMPORT_NUM, CONFIG_FILE_PATH, output_dir)
+    radar_worker = RadarWorker(CLI_COMPORT_NUM, CONFIG_FILE_PATH, output_dir, shutdown_flag)
     radar_worker.moveToThread(worker_thread)
     visualizer = LiveVisualizer(radar_worker, worker_thread)
     radar_worker.close_visualizer.connect(visualizer.close)

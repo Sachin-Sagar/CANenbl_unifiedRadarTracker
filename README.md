@@ -63,6 +63,18 @@ This architecture ensures that the high-frequency, I/O-bound tasks of reading fr
     sudo apt install can-utils
     ```
 
+### Raspberry Pi Specifics
+
+For Raspberry Pi deployments, the application includes GPIO-based controls:
+
+*   **Start Switch:** Connect a physical switch between **GPIO 17** (as defined by `BUTTON_PIN` in `config.py`) and a ground pin. The application will wait for this switch to be turned **ON** to begin execution.
+*   **Onboard LED Feedback:** The Raspberry Pi's onboard activity LED (`led0`) is used for status indications:
+    *   The LED stays **continuously ON** to indicate successful application startup and that logging has commenced.
+    *   The LED turns **OFF** upon shutdown to confirm that the application has received a shutdown signal and is terminating cleanly.
+*   **Switch-OFF Shutdown:** Turning the start switch **OFF** will trigger a graceful shutdown of the application.
+
+**Note:** Controlling the onboard LED and accessing GPIO pins requires the `RPi.GPIO` library (automatically installed with project dependencies) and running the script with `sudo` privileges.
+
 ### Package Management
 
 This project uses `uv` for fast package management, but `pip` can also be used.
@@ -125,6 +137,9 @@ pip install -r requirements.txt
     ```bash
     python main.py
     ```
+
+    *   **On Raspberry Pi:** The application will initialize and then wait for the physical switch (connected to GPIO 17) to be turned **ON** to start the radar tracking and CAN logging. To stop the application, turn the switch **OFF**.
+    *   **On other systems:** The application will start immediately.
 
 4.  **Select a mode:** The script will prompt you to choose between **(1) Live Tracking** or **(2) Playback from File**.
 
