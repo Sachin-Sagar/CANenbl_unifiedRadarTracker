@@ -135,3 +135,7 @@ A unit test is available to perform a sanity check on the CAN service integratio
 ```bash
 python -m unittest tests/test_can_service.py
 ```
+
+
+use: sudo ip link set can0 up type can bitrate 500000
+after connecting peak

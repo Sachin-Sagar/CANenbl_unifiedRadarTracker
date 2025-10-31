@@ -3,6 +3,7 @@
 import numpy as np
 import logging
 from datetime import datetime, timedelta
+import os
 
 from .tracking.data_loader import load_fhist_data, load_and_sync_can_data
 from .tracking.tracker import RadarTracker
@@ -47,7 +48,7 @@ def interp_with_extrap(x, xp, fp):
     
     return y
 
-def run_playback():
+def run_playback(output_dir):
     """
     Runs the radar tracker in playback mode from pre-recorded files.
     """
@@ -98,8 +99,7 @@ def run_playback():
     logging.info(f"\n--- Playback Complete ---")
     logging.info(f"Processed {num_frames} frames. Final number of tracks: {len(tracker.all_tracks)}")
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"output/track_history_playback_{timestamp}.json"
+    filename = os.path.join(output_dir, "track_history_playback.json")
     update_and_save_history(
         tracker.all_tracks,
         fhist_history,

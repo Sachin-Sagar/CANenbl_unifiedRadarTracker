@@ -7,6 +7,7 @@ import numpy as np
 import logging
 import psutil
 import os
+import serial.tools.list_ports
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QThread, pyqtSignal, QObject
@@ -26,11 +27,33 @@ import config as root_config
 from .tracking.utils.coordinate_transforms import interp_with_extrap
 
 
+import serial.tools.list_ports
+
 # --- Configuration ---
 if sys.platform == "win32":
     CLI_COMPORT_NUM = 'COM11'
 elif sys.platform == "linux":
-    CLI_COMPORT_NUM = '/dev/ttyACM0'
+    ports = serial.tools.list_ports.comports()
+    if not ports:
+        logging.error("No serial ports found. Please ensure the radar is connected and you have the necessary permissions (e.g., member of 'dialout' group).")
+        sys.exit(1)
+    elif len(ports) == 1:
+        CLI_COMPORT_NUM = ports[0].device
+        logging.info(f"Automatically selected serial port: {CLI_COMPORT_NUM}")
+    else:
+        print("Available serial ports:")
+        for i, port in enumerate(ports):
+            print(f"  {i}: {port.device}")
+        while True:
+            try:
+                choice = int(input("Please select the serial port for the radar: "))
+                if 0 <= choice < len(ports):
+                    CLI_COMPORT_NUM = ports[choice].device
+                    break
+                else:
+                    print("Invalid choice.")
+            except ValueError:
+                print("Invalid input.")
 else:
     logging.error(f"Unsupported OS '{sys.platform}' detected. Please set COM port manually.")
     CLI_COMPORT_NUM = None
@@ -45,11 +68,13 @@ class RadarWorker(QObject):
     """
     frame_ready = pyqtSignal(object)
     finished = pyqtSignal()
+    close_visualizer = pyqtSignal()
 
-    def __init__(self, cli_com_port, config_file):
+    def __init__(self, cli_com_port, config_file, output_dir):
         super().__init__()
         self.cli_com_port = cli_com_port
         self.config_file = config_file
+        self.output_dir = output_dir
         self.is_running = True
         self.params_radar = None
         self.h_data_port = None
@@ -67,7 +92,7 @@ class RadarWorker(QObject):
         """The main processing loop."""
         process = psutil.Process(os.getpid())
 
-        log_filename = f"output/radar_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        log_filename = os.path.join(self.output_dir, f"radar_log.json")
         self.logger_thread = QThread()
         self.data_logger = DataLogger(log_filename)
         self.data_logger.moveToThread(self.logger_thread)
@@ -82,6 +107,7 @@ class RadarWorker(QObject):
             logging.error("Failed to configure sensor. Exiting worker thread.")
             self.stop()
             self.finished.emit()
+            self.close_visualizer.emit()
             return
 
         params_tracker = define_parameters()
@@ -174,8 +200,7 @@ class RadarWorker(QObject):
         """Saves the final processed tracking history."""
         logging.info("\n--- Saving tracking history ---")
         if self.tracker and self.fhist_history:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"output/track_history_{timestamp}.json"
+            filename = os.path.join(self.output_dir, "track_history.json")
             update_and_save_history(
                 self.tracker.all_tracks,
                 self.fhist_history,
@@ -203,7 +228,7 @@ class RadarWorker(QObject):
             self.h_data_port.close()
             logging.info("--- Serial port closed ---")
 
-def main():
+def main(output_dir):
     """Main application entry point."""
     # --- THIS IS THE FIX ---
     # The setup_logging() call is removed from here to prevent double-logging.
@@ -211,9 +236,10 @@ def main():
     # --- END OF FIX ---
     app = QApplication(sys.argv)
     worker_thread = QThread()
-    radar_worker = RadarWorker(CLI_COMPORT_NUM, CONFIG_FILE_PATH)
+    radar_worker = RadarWorker(CLI_COMPORT_NUM, CONFIG_FILE_PATH, output_dir)
     radar_worker.moveToThread(worker_thread)
     visualizer = LiveVisualizer(radar_worker, worker_thread)
+    radar_worker.close_visualizer.connect(visualizer.close)
     visualizer.show()
     worker_thread.started.connect(radar_worker.run)
     radar_worker.frame_ready.connect(visualizer.update_plot)

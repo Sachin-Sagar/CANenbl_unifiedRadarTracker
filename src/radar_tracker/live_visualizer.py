@@ -66,12 +66,10 @@ class LiveVisualizer(QMainWindow):
         # 1. Signal the worker to stop its loop
         self.worker.stop()
         
-        # 2. Tell the QThread to quit its event loop
-        self.worker_thread.quit()
-        
-        # 3. Wait for the thread to finish completely. This is the crucial step
-        #    that prevents the race condition on stdout.
-        self.worker_thread.wait()
+        # 2. Tell the QThread to quit its event loop if it's still running
+        if self.worker_thread and self.worker_thread.isRunning():
+            self.worker_thread.quit()
+            self.worker_thread.wait()
         
         print("--- Shutdown complete. ---")
         event.accept() # Allow the window to close
