@@ -51,9 +51,9 @@ def blink_onboard_led(n=3, delay=0.2):
     except IOError:
         print("Could not control onboard LED. Are you running as root?")
 
-def check_for_switch_off(stop_event, shutdown_flag):
+def check_for_switch_off(shutdown_flag):
     """Detects when the switch is turned off (pin high) to signal shutdown."""
-    while not stop_event.is_set():
+    while not shutdown_flag.is_set():
         if GPIO.input(BUTTON_PIN) == GPIO.HIGH:
             print("Switch is OFF! Stopping...")
             shutdown_flag.set()

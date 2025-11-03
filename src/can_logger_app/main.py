@@ -8,9 +8,12 @@ import struct
 
 # --- NOTE: Only modules needed by all processes remain at the top level ---
 
-def main():
+def main(shutdown_flag=None):
     """
     Main function using a shared memory pipeline and a high-performance queue.
+    
+    Args:
+        shutdown_flag (multiprocessing.Event, optional): Event to signal shutdown. Defaults to None.
     """
     # --- MODIFICATION: Imports are moved inside main() ---
     # This prevents them from being executed by the spawned worker processes.
@@ -118,11 +121,11 @@ def main():
             p.start()
 
         print("\n[+] Logging data... Press Ctrl-C to stop.")
-        while True:
+        while not (shutdown_flag and shutdown_flag.is_set()):
             if not all(p.is_alive() for p in processes):
                 print("\nError: One or more worker processes have died unexpectedly. Shutting down.")
                 break
-            time.sleep(1)
+            time.sleep(1) # Check every second
 
     except (KeyboardInterrupt, SystemExit):
         print("\n\n[+] Ctrl-C detected. Shutting down gracefully...")
