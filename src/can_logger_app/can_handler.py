@@ -1,10 +1,11 @@
-# can_handler.py
+# src/can_logger_app/can_handler.py
 
-import can
 import queue
 import threading
 import time
-from . import config  # <-- MODIFIED: Use relative import
+from . import config  # <-- This import is safe
+
+# --- MODIFICATION: 'import can' has been REMOVED from the top ---
 
 class CANReader(threading.Thread):
     def __init__(self, bus_params, data_queues, id_to_queue_map, perf_tracker, connection_event):
@@ -24,19 +25,24 @@ class CANReader(threading.Thread):
         self.messages_received = 0
 
     def run(self):
+        # --- MODIFICATION: Import 'can' INSIDE the run() method ---
+        # This ensures all Qt/pcan resources are created in THIS thread.
+        import can
+        
         self._is_running.set()
         
         try:
-            # --- MODIFICATION: Create the bus object *inside* the thread ---
+            # --- Create the bus object *inside* the thread ---
+            print(" -> [CANReader] Thread trying to connect to CAN bus...")
             self.bus = can.interface.Bus(**self.bus_params)
             
             # Signal to the main thread that the connection was successful
             self.connection_event.set()
-            print(f" -> CANReader thread connected successfully.")
+            print(f" -> [CANReader] Thread connected successfully on {self.bus_params.get('channel')}.")
 
             while self._is_running.is_set():
                 start_time = time.perf_counter()
-                msg = self.bus.recv(timeout=0.001)
+                msg = self.bus.recv(timeout=0.001) # Use a small timeout
                 
                 if msg:
                     self.messages_received += 1
@@ -60,16 +66,23 @@ class CANReader(threading.Thread):
                         except queue.Full:
                             self.messages_dropped += 1
         
-        except (can.CanError, OSError) as e:
+        except (can.CanError, OSError, ImportError) as e:
             # --- MODIFICATION: Signal failure if connection fails ---
-            print(f"FATAL [CANReader]: {e}")
-            self.connection_event.clear() # Ensure it's clear on failure
+            print(f"FATAL [CANReader]: Failed to create or read from bus: {e}")
+            # We don't set the event, so the main thread will know it failed
         
         finally:
             # This code runs INSIDE the CANReader thread after the loop exits
             if self.bus:
                 self.bus.shutdown()
-                print(" -> CANReader thread shut down bus successfully.")
+                print(" -> [CANReader] Thread shut down bus successfully.")
+                # --- MODIFICATION: Force object destruction in THIS thread ---
+                self.bus = None
+            
+            # Ensure the event is cleared if it was never set (e.g., error)
+            # or just to be clean.
+            if self.connection_event.is_set():
+                self.connection_event.clear()
 
 
     def stop(self):

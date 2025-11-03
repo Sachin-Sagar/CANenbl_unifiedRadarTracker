@@ -1,4 +1,4 @@
-# main.py
+# src/can_logger_app/main.py
 
 import os
 import time
@@ -138,6 +138,8 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None):
         if not connection_success:
             # The event was not set; CANReader failed to connect
             raise can.CanError(f"Failed to connect on '{config.CAN_INTERFACE}' channel {config.CAN_CHANNEL}. CANReader thread failed.")
+        
+        print(" -> CAN Connection successful. Proceeding with logger setup.")
 
         print(" -> Initializing log writer thread...")
         log_writer_thread = LogWriter(index_queue=index_mp_queue, shared_mem_array=shared_mem_array, filepath=output_filepath, perf_tracker=perf_tracker)
