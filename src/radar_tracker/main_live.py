@@ -225,6 +225,9 @@ class RadarWorker(QObject):
         """Stops the processing loop and the logger."""
         logging.info("--- Stopping worker thread... ---")
         self.is_running = False
+
+        if self.shutdown_flag:
+            self.shutdown_flag.set()
         
         if self.data_logger:
             self.data_logger.stop()

@@ -99,9 +99,8 @@ if __name__ == '__main__':
                 live_thread = threading.Thread(target=main_live, args=(output_dir, shutdown_flag,))
                 live_thread.start()
                 
-                # Wait for Ctrl+C
-                while live_thread.is_alive():
-                    live_thread.join(timeout=1) # Use timeout to allow checking for keyboard interrupt
+                # Wait for the live thread to finish, allowing for Ctrl+C
+                live_thread.join()
 
             elif mode == '2':
                 print("\nStarting in PLAYBACK mode...")
