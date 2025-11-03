@@ -5,8 +5,7 @@ import time
 from datetime import datetime
 import multiprocessing
 import struct
-
-from .can_process import CANProcess
+import signal
 
 # --- NOTE: Only modules needed by all processes remain at the top level ---
 
@@ -20,12 +19,23 @@ def main(shutdown_flag=None, output_dir=None):
     """
     # --- MODIFICATION: Imports are moved inside main() ---
     # This prevents them from being executed by the spawned worker processes.
+    import can
     import cantools
     from . import config
     from . import utils
+    from .can_handler import CANReader
     from .data_processor import processing_worker, LOG_ENTRY_FORMAT
     from .log_writer import LogWriter
     # --------------------------------------------------------
+
+    import signal
+
+    def signal_handler(signum, frame):
+        print("\n[+] SIGTERM received, shutting down gracefully...")
+        if shutdown_flag:
+            shutdown_flag.set()
+
+    signal.signal(signal.SIGTERM, signal_handler)
 
     print("--- Real-Time CAN Logger ---")
 
@@ -89,16 +99,24 @@ def main(shutdown_flag=None, output_dir=None):
     shared_mem_array = multiprocessing.RawArray('c', buffer_size)
     
     perf_tracker = manager.dict()
+    bus = None
     processes = []
     
-    can_process = None
+    dispatcher_thread = None
     log_writer_thread = None
 
     try:
-        can_process = CANProcess(shutdown_flag, raw_mp_queue, id_to_queue_map, perf_tracker)
-        can_process_process = multiprocessing.Process(target=can_process.run, daemon=True)
-        can_process_process.start()
-        processes.append(can_process_process)
+        print(" -> Connecting to CAN hardware...")
+        bus = can.interface.Bus(
+            interface=config.CAN_INTERFACE,
+            channel=config.CAN_CHANNEL,
+            bitrate=config.CAN_BITRATE,
+            receive_own_messages=False
+        )
+        print(f" -> Connection successful on '{config.CAN_INTERFACE}' channel {config.CAN_CHANNEL}.")
+
+        dispatcher_thread = CANReader(bus=bus, data_queues={'high': raw_mp_queue, 'low': raw_mp_queue}, id_to_queue_map=id_to_queue_map, perf_tracker=perf_tracker)
+        dispatcher_thread.start()
 
         log_writer_thread = LogWriter(index_queue=index_mp_queue, shared_mem_array=shared_mem_array, filepath=output_filepath, perf_tracker=perf_tracker)
         log_writer_thread.start()
@@ -123,11 +141,32 @@ def main(shutdown_flag=None, output_dir=None):
 
     except (KeyboardInterrupt, SystemExit):
         print("\n\n[+] Ctrl-C detected. Shutting down gracefully...")
+    except (can.CanError, OSError) as e:
+        print("\n" + "="*60)
+        print("FATAL: CAN LOGGER FAILED TO INITIALIZE".center(60))
+        print("="*60)
+        print(f"Error: {e}")
+        print(f"Could not connect to interface '{config.CAN_INTERFACE}' on channel '{config.CAN_CHANNEL}'.")
+        print("\nTroubleshooting:")
+        print(" 1. Is the CAN hardware (e.g., PCAN-USB) securely connected?")
+        if config.OS_SYSTEM == "Linux":
+            print(" 2. Is the correct kernel driver loaded? (e.g., 'peak_usb')")
+            print(f" 3. Does the CAN interface '{config.CAN_CHANNEL}' exist? (check with 'ip link show')")
+        else: # Windows
+            print(" 2. Are the necessary drivers (e.g., PCAN-Basic) installed?")
+        print("="*60 + "\n")
     finally:
         print(" -> Stopping worker threads and processes...")
         
-        if shutdown_flag:
-            shutdown_flag.set()
+        if dispatcher_thread and dispatcher_thread.is_alive():
+            dispatcher_thread.stop()
+            dispatcher_thread.join(timeout=2)
+
+        for _ in processes:
+            try:
+                raw_mp_queue.put(None, timeout=0.1)
+            except Exception:
+                pass 
 
         for p in processes:
             p.join(timeout=2)
@@ -141,6 +180,9 @@ def main(shutdown_flag=None, output_dir=None):
         if log_writer_thread and log_writer_thread.is_alive():
             log_writer_thread.stop()
             log_writer_thread.join(timeout=2)
+        
+        if bus:
+            bus.shutdown()
         
         print(" -> Workers stopped.")
         

@@ -21,6 +21,10 @@ from radar_tracker.main_live import main as main_live
 from radar_tracker.main_playback import run_playback
 
 
+import json
+import logging
+from src.radar_tracker.json_log_handler import JSONLogHandler
+
 if __name__ == '__main__':
     multiprocessing.freeze_support()
     # Create a timestamped output directory
@@ -71,12 +75,9 @@ if __name__ == '__main__':
             shutdown_flag.set() # Signal all processes to shutdown
 
             if can_logger_process and can_logger_process.is_alive():
-                print("Waiting for CAN logger to finish...")
-                can_logger_process.join(timeout=5) # Wait for the logger to finish
-                if can_logger_process.is_alive():
-                    print("CAN logger did not exit gracefully, terminating.")
-                    can_logger_process.terminate()
-                can_logger_process.join()
+                print("Terminating CAN logger...")
+                can_logger_process.terminate()
+                can_logger_process.join(timeout=5)
 
             if platform.system() == "Linux":
                 turn_off_led()
@@ -116,12 +117,17 @@ if __name__ == '__main__':
                 live_thread.join(timeout=5)
 
             if can_logger_process and can_logger_process.is_alive():
-                print("Waiting for CAN logger to finish...")
+                print("Terminating CAN logger...")
+                can_logger_process.terminate()
                 can_logger_process.join(timeout=5)
-                if can_logger_process.is_alive():
-                    print("CAN logger did not exit gracefully, terminating.")
-                    can_logger_process.terminate()
-                    can_logger_process.join()
             
+            # --- Write console logs to JSON ---
+            for handler in logging.getLogger().handlers:
+                if isinstance(handler, JSONLogHandler):
+                    with open(os.path.join(output_dir, "console_log.json"), 'w') as f:
+                        json.dump(handler.log_records, f, indent=4)
+                    break
+            # -------------------------------------
+
             print("Application shut down.")
 
