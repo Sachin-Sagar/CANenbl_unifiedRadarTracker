@@ -34,44 +34,25 @@ class RadarTracker:
         default_x_range = self.params['barrier_detect_params']['default_x_range']
         self.filtered_barrier_x = {'left': default_x_range[0], 'right': default_x_range[1]}
 
-    def _update_frame_with_can_data(self, frame, can_signals):
-        """Updates the frame object with the interpolated CAN signals."""
-        if can_signals:
-            for signal_name, value in can_signals.items():
-                setattr(frame, signal_name, value)
-        return frame
-
-    def process_frame(self, current_frame, can_signals=None):
+    def process_frame(self, current_frame):
         """
         Processes a single frame of radar data and updates the tracks.
         This contains the logic from the loop in the original tracker's main.py.
+        MODIFIED: The 'can_signals' parameter has been removed. The necessary ego
+        motion data (like egoVx) is now expected to be pre-populated in the
+        'current_frame' object by the data adapter.
         """
         # Calculate delta_t
         delta_t = (current_frame.timestamp - self.last_timestamp_ms) / 1000.0 if self.frame_idx > 0 else 0.05
         if delta_t <= 0: delta_t = 0.05
         self.last_timestamp_ms = current_frame.timestamp
 
-        # --- Prepare CAN and IMU data with robust fallbacks ---
-        if can_signals:
-            can_speed = can_signals.get('VehSpeed_Act_kmph', np.nan)
-            can_torque = can_signals.get('ShaftTorque_Est_Nm', np.nan)
-            can_gear = can_signals.get('Gear_Engaged_St_enum', np.nan)
-            
-            def get_numeric(value, default):
-                if not isinstance(value, numbers.Number) or np.isnan(value):
-                    return default
-                return value
-
-            can_grade = get_numeric(can_signals.get('EstimatedGrade_Est_Deg'), 0.0)
-            imu_ax = get_numeric(can_signals.get('imuProc_xaccel'), 0.0)
-            imu_ay = get_numeric(can_signals.get('imuProc_yaccel'), 0.0)
-            imu_omega = get_numeric(can_signals.get('imuProc_yawRate'), 0.0)
-        else:
-            can_speed, can_torque, can_gear, can_grade = np.nan, np.nan, np.nan, 0.0
-            imu_ax, imu_ay, imu_omega = 0.0, 0.0, 0.0
+        # --- CAN and IMU data is now part of current_frame ---
+        # Default values are used if not provided by the adapter.
+        can_speed = current_frame.correctedEgoSpeed_mps * 3.6 # Convert m/s back to km/h for the function
+        can_torque, can_gear, can_grade = np.nan, np.nan, 0.0
+        imu_ax, imu_ay, imu_omega = 0.0, 0.0, 0.0
         
-        current_frame = self._update_frame_with_can_data(current_frame, can_signals)
-
         cartesian_pos_data = current_frame.posLocal
         point_cloud = current_frame.pointCloud
         num_points = cartesian_pos_data.shape[1]

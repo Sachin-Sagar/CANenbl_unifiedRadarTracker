@@ -78,6 +78,35 @@ After fixing the hardware conflict, the `QObject` error *still* persisted.
 * **Cause:** This `print` statement was in the global scope of `src/radar_tracker/hardware/parsing_utils.py`. On Windows, `multiprocessing` re-imports all scripts for each new worker process, causing the `print` to re-run.
 * **Solution:** Removed the `print` statements from the global scope of `parsing_utils.py`.
 
+
+### Part 6: Integrating CAN Data into Radar Tracker
+
+#### The Problem Identified
+Even though CAN signals were correctly logged to `can_log.json` and read by the `radar_tracker`'s `RadarWorker`, they were not appearing in the `track_history.json` and consequently not being used by the tracking algorithm.
+
+#### Diagnosis and Initial Solution
+We traced the data flow and found that while `main_live.py` was correctly interpolating CAN data into a `can_data_for_frame` dictionary, this dictionary was not being passed to `src/radar_tracker/data_adapter.py`. The `adapt_frame_data_to_fhist` function in `data_adapter.py` was creating the `FHistFrame` object (the primary input for the tracking algorithm) with default zero values for ego-motion fields (e.g., `egoVx`).
+
+To fix this:
+1.  **Modified `src/radar_tracker/data_adapter.py`:** The `adapt_frame_data_to_fhist` function was updated to accept `can_signals` as an argument. It now populates `fhist_frame.egoVx` and `fhist_frame.correctedEgoSpeed_mps` using the `CAN_VS_KMH` signal from the provided `can_signals` dictionary (converting from km/h to m/s).
+2.  **Modified `src/radar_tracker/main_live.py`:** The call to `adapt_frame_data_to_fhist` was updated to pass the `can_data_for_frame` dictionary. Additionally, the execution order was adjusted so that CAN data interpolation occurred *before* the frame adaptation.
+3.  **Refactored `src/radar_tracker/tracking/tracker.py`:** The `process_frame` method was cleaned up. The redundant `can_signals` parameter was removed from its signature and all internal logic related to processing this parameter was deleted, as the necessary ego-motion data is now embedded directly in the `current_frame` (FHistFrame) object.
+
+#### Regression: `AttributeError: 'dict' object has no attribute 'timestamp_ms'`
+After the initial fixes, the application crashed with an `AttributeError` when trying to access `frame_data.header.timestamp_ms`. This was a regression introduced by replacing `fhist_frame.timestamp` with `frame_data.header.timestamp_ms` in `main_live.py`, based on an incorrect assumption about the structure of `frame_data.header`.
+
+#### Regression Fix: `KeyError: 'timestamp_ms'`
+Correcting the `AttributeError`, we changed the access to `frame_data.header['timestamp_ms']`. However, this led to a `KeyError`, indicating that `timestamp_ms` was not a valid key in the `frame_data.header` dictionary at all.
+
+#### Final Solution for Timestamp Handling
+Upon closer inspection, `frame_data.header` (obtained from `read_and_parse_frame`) does not contain a direct timestamp. Instead, the application's timing logic relies on calculating the current frame's timestamp by adding a fixed interval (50 ms) to the `self.tracker.last_timestamp_ms`.
+
+To resolve this:
+1.  **Modified `src/radar_tracker/data_adapter.py`:** The `adapt_frame_data_to_fhist` function was updated to accept a pre-calculated `current_timestamp_ms` directly, rather than calculating it internally.
+2.  **Modified `src/radar_tracker/main_live.py`:** The `run` method now manually calculates `current_timestamp_ms = self.tracker.last_timestamp_ms + 50.0`. This calculated timestamp is then consistently used for both the `_interpolate_can_data` function and the `adapt_frame_data_to_fhist` function.
+
+This final set of changes ensures that CAN data is correctly integrated, and timestamps are handled robustly, resolving both the data fusion problem and the runtime errors.
+
 ## 4. Final Status
 
 The application now runs as expected on Windows (in a dry run):

@@ -24,7 +24,7 @@ The application can be run in two modes:
 * **Simultaneous Logging & Live-Share:** A single CAN process both logs all decoded signals to a `can_log.json` file and shares the latest signal values to the live radar tracker via a shared memory dictionary.
 * **DBC-Based Decoding:** Uses an industry-standard `.dbc` file to decode raw CAN messages into physical values.
 * **Cross-Platform:** Automatically detects the host OS (Windows or Linux) and selects the correct CAN backend (`pcan` or `socketcan`).
-* **Real-time Fusion:** The CAN data is interpolated and synchronized with the radar frames to provide the tracker with the vehicle's state at the exact moment of the radar measurement.
+*   **Real-time Fusion:** The CAN data is interpolated, synchronized with the radar frames, and integrated directly into the `FHistFrame` object to provide the tracker with the vehicle's state (e.g., speed) at the exact moment of the radar measurement.
 
 ### General
 
@@ -41,7 +41,7 @@ The application consists of three main components running in parallel to ensure 
     * The `RadarWorker` configures and reads from the **radar** sensor.
     * It reads the latest CAN data from a `Manager.dict()` (shared memory).
     * It interpolates the CAN data to match the radar timestamp.
-    * It runs the core `RadarTracker` algorithm with the fused data.
+    * **NEW:** It integrates the interpolated CAN data (e.g., vehicle speed) directly into the `FHistFrame` object, which is then passed to the core `RadarTracker` algorithm.
 
 2.  **CAN Process (Multiprocessing `Process`):**
     * A single, separate process that has exclusive control of the **CAN hardware**.

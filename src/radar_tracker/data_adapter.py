@@ -23,13 +23,17 @@ class FHistFrame:
         self.detectedClusterInfo = np.array([])
         self.filtered_barrier_x = None # Will be populated by the tracker
 
-def adapt_frame_data_to_fhist(frame_data, last_timestamp_ms):
+def adapt_frame_data_to_fhist(frame_data, current_timestamp_ms, can_signals=None):
     """
     Converts a real-time FrameData object into an FHistFrame object
     that the tracking algorithms can process.
+    
+    MODIFIED: Now accepts a dictionary of interpolated CAN signals to populate
+    vehicle motion fields.
+    MODIFIED: Now accepts a pre-calculated timestamp for the current frame.
     """
     fhist_frame = FHistFrame()
-    fhist_frame.timestamp = last_timestamp_ms + 50.0
+    fhist_frame.timestamp = current_timestamp_ms
 
     if frame_data.point_cloud is not None and frame_data.point_cloud.size > 0:
         fhist_frame.pointCloud = frame_data.point_cloud
@@ -39,6 +43,19 @@ def adapt_frame_data_to_fhist(frame_data, last_timestamp_ms):
         fhist_frame.posLocal = np.empty((2, 0))
 
     fhist_frame.isOutlier = np.zeros(frame_data.num_points, dtype=bool)
+
+    # --- NEW: Populate fhist_frame with live CAN data ---
+    if can_signals:
+        # Convert vehicle speed from km/h to m/s for the tracker
+        speed_kmh = can_signals.get('CAN_VS_KMH', 0.0)
+        speed_mps = speed_kmh / 3.6
+        
+        fhist_frame.egoVx = speed_mps
+        fhist_frame.correctedEgoSpeed_mps = speed_mps
+        
+        # NOTE: Add other signals like yaw rate ('CAN_YAW_RATE') if the tracker uses them.
+        # For now, we are only using vehicle speed.
+
     return fhist_frame
 
 def adapt_matlab_frame_to_fhist(matlab_frame):

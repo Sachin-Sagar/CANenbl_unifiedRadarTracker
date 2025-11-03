@@ -137,12 +137,15 @@ class RadarWorker(QObject):
             
             self.data_logger.add_data(frame_data)
 
-            fhist_frame = adapt_frame_data_to_fhist(frame_data, self.tracker.last_timestamp_ms)
+            # --- MODIFIED: Get CAN data *before* adapting the frame ---
+            # This allows us to inject the vehicle's speed into the frame history
+            # object that the tracker uses for ego motion compensation.
+            current_timestamp_ms = self.tracker.last_timestamp_ms + 50.0
+            can_data_for_frame = self._interpolate_can_data(current_timestamp_ms)
+            fhist_frame = adapt_frame_data_to_fhist(frame_data, current_timestamp_ms, can_signals=can_data_for_frame)
             
-            # Get and interpolate CAN data
-            can_data_for_frame = self._interpolate_can_data(fhist_frame.timestamp)
-
-            updated_tracks, processed_frame = self.tracker.process_frame(fhist_frame, can_signals=can_data_for_frame)
+            # --- MODIFIED: The can_signals are now inside fhist_frame ---
+            updated_tracks, processed_frame = self.tracker.process_frame(fhist_frame)
             self.fhist_history.append(processed_frame)
 
             num_confirmed_tracks = sum(1 for t in updated_tracks if t.get('isConfirmed') and not t.get('isLost'))
