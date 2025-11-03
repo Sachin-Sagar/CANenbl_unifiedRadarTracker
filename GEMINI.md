@@ -1,221 +1,86 @@
-# GEMINI.md
+# GEMINI.md - Project Log & Debugging Journey
 
-## Project Overview
+## 1. Project Overview
 
-This project is a high-performance, real-time CAN signal logger. It's a command-line tool written in Python that connects to a CAN hardware interface, decodes messages using a DBC file, and saves specific signal data to a timestamped JSON Lines file.
+This project, `CANenbl_unifiedRadarTracker`, merges two systems:
+1.  A real-time radar tracking application (`radar_tracker`) built on PyQt5 and `QThread`.
+2.  A high-performance CAN logging application (`can_logger_app`) built on `multiprocessing`.
 
-The architecture is designed for high performance and reliability, using a multiprocessing, shared-memory pipeline to log signals from high-speed and low-speed messages simultaneously without data loss.
+The goal is to have the CAN logger run as a background service that **both** logs all decoded CAN signals to a `can_log.json` file and **simultaneously** provides live, interpolated CAN data to the radar tracker for sensor fusion.
 
-## Building and Running (PCAN / SocketCAN)
+## 2. Final System Architecture (Live Mode)
 
-### 1. Prerequisites
+The final architecture consists of two main processes to ensure stability, performance, and cross-platform compatibility (especially on Windows):
 
-* Python 3.10 or newer.
-* **Hardware:** A **PCAN-USB** adapter.
-* **Drivers (Windows):** Install the [PCAN-Basic drivers](https://www.peak-system.com/PCAN-Basic.239.0.html?&L=1).
-* **Drivers (Linux):** Install `can-utils` (`sudo apt install can-utils`).
+1.  **Main/Radar Process (Main Thread + QThread):**
+    * Runs the `main.py` script.
+    * Creates a `multiprocessing.Manager` and a shared dictionary (`live_data_dict`).
+    * Launches the **CAN Process** (`can_logger_app`).
+    * Launches the `RadarWorker` in a `QThread` (the `main_live` app).
+    * The `RadarWorker` reads from the `live_data_dict`, interpolates the data, and runs the tracking algorithm.
 
-### 2. Setup
+2.  **CAN Process (`multiprocessing.Process`):**
+    * This single process is given exclusive control of the CAN hardware.
+    * It runs the `can_logger_app.main` function.
+    * **CANReader Thread:** A dedicated `threading.Thread` *within this process* is now responsible for the entire lifecycle of the `can.interface.Bus` object (create, use, destroy) to solve Qt threading errors.
+    * **Worker Pool:** A pool of sub-processes decodes CAN messages.
+    * **LogWriter Thread:** Writes all decoded signals to `can_log.json`.
+    * **Live Data Sharing:** The worker pool also writes the latest signal values into the `live_data_dict` provided by the Main Process.
 
-It is recommended to use a virtual environment.
+This architecture solves all hardware resource conflicts and Windows-specific threading errors.
 
-```bash
-# Create a new virtual environment
-python -m venv .venv
+## 3. The Debugging Journey (Windows)
 
-# Activate it (Windows PowerShell)
-.venv\Scripts\Activate.ps1
+Achieving this stable architecture required solving two major, intertwined problems that only appear on Windows.
 
-# On macOS/Linux:
-source .venv/bin/activate
-```
+### Part 1: The Initial Failure
 
-### 3. Install Dependencies
+After merging the code, the app failed on Windows with two symptoms:
+1.  **Missing `can_log.json`:** The CAN log file was never created or was empty.
+2.  **`QObject` Error:** The application would crash on exit with `QObject::~QObject: Timers cannot be stopped from another thread`.
 
-The project dependencies are managed by pyproject.toml.
+### Part 2: Diagnosis & Solution - The "Unified CAN Process"
 
-```bash
-# Install the packages listed in pyproject.toml
-pip install -e .
-```
+* **Diagnosis (Hardware Conflict):** We discovered that two different parts of the code were trying to control the PCAN hardware at the same time:
+    1.  The `can_logger_app` process (to write the log file).
+    2.  The `LiveCANManager` (started by the radar's `QThread`, to provide live data).
+* The PCAN driver only allows **one** process to connect. Whichever process lost this "race" would fail. This was why the `can_log.json` was missing—the logger was losing the race.
+* **Solution (The Unified Process):**
+    1.  **Eliminate `LiveCANManager`:** We completely removed the `src/can_service/live_can_manager.py` from the `radar_tracker`'s execution path.
+    2.  **Promote `can_logger_app`:** We made the `can_logger_app` the *only* process that touches the CAN hardware.
+    3.  **Implement Sharing:** We modified `main.py` to create a `multiprocessing.Manager.dict()` and pass it to *both* processes.
+    4.  We updated `src/can_logger_app/data_processor.py` to write the decoded signals to this shared dictionary *in addition* to writing them to the log file queue.
+    5.  We updated `src/radar_tracker/main_live.py` to read from this shared dictionary instead of the old `LiveCANManager`.
 
-### 4. Configuration
+### Part 3: The Stubborn `QObject` Error
 
-All hardware settings are now auto-configured in config.py and can_sniffer.py.
+After fixing the hardware conflict, the `QObject` error *still* persisted.
 
-    The script detects the OS (Windows or Linux).
+* **Diagnosis (Qt Thread Ownership):** The `pcan` backend for `python-can` uses Qt internally. Qt has a strict rule: **A QObject must be created, used, and destroyed all in the same thread.**
+* Our code was violating this:
+    1.  **Creation:** `can_logger_app/main.py` created the `can.interface.Bus(...)` object in the **Main Thread**.
+    2.  **Usage:** `can_logger_app/can_handler.py` called `bus.recv()` in the **CANReader Thread**.
+    3.  **Destruction:** The `bus` object was destroyed by the **Main Thread** when the process exited.
+* This cross-thread interaction is what caused the "Timers cannot be stopped from another thread" error.
 
-    On Windows, it uses the pcan interface.
+### Part 4: The Final Solution (Thread-Local Bus)
 
-    On Linux, it uses the socketcan interface with channel "can0".
+* **The Fix:** We moved the `can.interface.Bus` creation *into* the `CANReader` thread.
+    1.  `src/can_logger_app/main.py` was changed to no longer create the `bus` object. It now just passes the `bus_params` (a dictionary) to the `CANReader`.
+    2.  It also creates a `threading.Event` (`connection_event`) and waits on it.
+    3.  `src/can_logger_app/can_handler.py` was updated. Its `run()` method now creates the `can.interface.Bus` itself.
+    4.  If the connection is successful, it calls `connection_event.set()` to tell the main thread to proceed.
+    5.  A `finally` block was added to the `run()` method's `try` block to ensure `bus.shutdown()` is called from *within the `CANReader` thread*, satisfying Qt's thread-ownership rules.
 
-Place your DBC file and signal list file in the `input/` directory.
+### Part 5: Cosmetic Fix (Log Spam)
 
-### 5. Running the Application
+* **Problem:** The console was spammed with `"EXECUTING ROBUST PARSING SCRIPT"` messages.
+* **Cause:** This `print` statement was in the global scope of `src/radar_tracker/hardware/parsing_utils.py`. On Windows, `multiprocessing` re-imports all scripts for each new worker process, causing the `print` to re-run.
+* **Solution:** Removed the `print` statements from the global scope of `parsing_utils.py`.
 
-**On Linux (e.g., Raspberry Pi)**
+## 4. Final Status
 
-You must bring the CAN interface up manually first.
-
-```bash
-sudo ip link set can0 up type can bitrate 500000
-python main.py
-```
-
-**On Windows**
-
-```bash
-python main.py
-```
-
-The logger will start and save data to the `output/` folder. To stop, press Ctrl+C.
-
-## The Debugging Journey: From Kvaser Failure to PCAN Success
-
-This project was originally developed for Kvaser hardware, but significant issues were encountered when migrating to a Linux (Raspberry Pi) environment. This document outlines the debugging process that led to a successful hardware migration.
-
-### Part 1: Failure of the Kvaser Proprietary Driver
-
-The initial attempt to run the Kvaser-configured application on a Raspberry Pi failed, even after the Kvaser linuxcan drivers (mhydra v8.50.312) and canlib (v5.50) were installed.
-
-*   **Initial Error:** The application immediately crashed with `FATAL ERROR: Function canIoCtl failed - Error in parameter [Error Code -1]`.
-*   **Core Diagnosis:** We ran two key tests:
-    *   **Kvaser's `listChannels` Tool:** This C-based example program succeeded, proving the hardware, kernel driver (mhydra), and canlib library were installed correctly.
-    *   **Minimal Python Script:** A simple `can.interface.Bus(...)` script failed with the same `canIoCtl` error.
-*   **Conclusion:** The problem was not the application code or the drivers themselves, but a low-level incompatibility between the `python-can` (v4.6.1) library's `kvaser` backend and the specific `canlib` version on the Pi.
-
-### Part 2: Successful Migration to PCAN/SocketCAN
-
-With the Kvaser proprietary stack deemed unworkable, we migrated to the standard Linux SocketCAN interface.
-
-*   **Hypothesis 1: Use Kvaser with SocketCAN.**
-    *   **Test:** We checked if the standard `kvaser_usb` SocketCAN driver was available.
-    *   **Result:** `modprobe: FATAL: Module kvaser_usb not found.` This path was a dead end. The Pi's kernel did not include this driver.
-*   **Hypothesis 2: Change hardware to one with known, working SocketCAN drivers.**
-    *   **Test:** We checked if the standard driver for PCAN (`peak_usb`) was available.
-    *   **Result:** `lsmod | grep peak_usb` succeeded, showing the driver was already loaded in the kernel. This confirmed PCAN was a viable path.
-*   **Implementation:** The code was modified to support PCAN.
-    *   `config.py` and `can_sniffer.py` were updated to use `platform.system()` to auto-detect the OS.
-    *   **Windows:** Uses `CAN_INTERFACE = "pcan"`.
-    *   **Linux:** Uses `CAN_INTERFACE = "socketcan"`.
-*   **Final Errors & Solutions:**
-    *   **Error:** `TypeError: expected str, bytes or os.PathLike object, not int`
-        *   **Fix:** Changed `CAN_CHANNEL` in `config.py` from `0` to `"can0"` for the Linux/SocketCAN configuration.
-    *   **Error:** `OSError: [Errno 100] Network is down`
-        *   **Fix:** Added a mandatory step for Linux users to run `sudo ip link set can0 up type can bitrate 500000` before starting the script.
-
-### Final Conclusion
-
-The migration was 100% successful. The application is now fully functional on both Windows and Raspberry Pi (Linux) using PCAN hardware. The original driver incompatibility was completely bypassed by moving to the stable, kernel-integrated SocketCAN interface (`peak_usb`).
-
-## Development Conventions
-
-*   The project uses a modular structure, with clear separation of concerns between the different components of the pipeline.
-*   Configuration is centralized in `config.py`.
-*   The `main.py` script orchestrates the entire pipeline.
-*   The project uses `multiprocessing` to take advantage of multiple CPU cores.
-*   Shared memory is used to efficiently transfer data between processes.
-*   The `pyproject.toml` file defines the project dependencies.
-*   The code is well-commented, and the `README.md` file provides a good overview of the project.
-
-## Merge Progress
-
-This section tracks the progress of merging the `Read_CAN_RT_strip` and `Unified-radar-tracker` projects.
-
-### Phase 1: Project Scaffolding (Completed)
-
-*   [x] Created `src` directory.
-*   [x] Copied `Unified-radar-tracker/src` to `src/radar_tracker`.
-*   [x] Copied `Read_CAN_RT_strip` python files to `src/can_logger_app`.
-*   [x] Created `src/can_service` and copied essential CAN files.
-*   [x] Copied configuration files (`configs`, `config.py`, `input`).
-*   [x] Created `__init__.py` files.
-*   [x] Created `main.py`.
-*   [x] Merged dependencies into `requirements.txt`.
-
-### Phase 2: Refactor can_logger into can_service (Completed)
-
-*   [x] Created `src/can_service/live_can_manager.py`.
-*   [x] Modified `src/can_service/data_processor.py` to use an output queue.
-*   [x] Implemented the `LiveCANManager` class.
-
-### Phase 3: Integrate can_service into radar_tracker (Completed)
-
-*   [x] **Task 3.1: Add Interpolation Helper**
-    *   [x] Add `interp_with_extrap` function to a utility file in `src/radar_tracker/tracking/utils`.
-*   [x] **Task 3.2: Modify the RadarWorker (`main_live.py`)**
-    *   [x] `__init__`: Import and create `LiveCANManager`.
-    *   [x] `run` (start-up): Call `can_manager.start()`.
-    *   [x] `run` (main loop):
-        *   [x] Get latest CAN data from `can_manager`.
-        *   [x] Interpolate CAN data to match radar frame timestamp.
-        *   [x] Pass interpolated data to `tracker.process_frame()`.
-    *   [x] `stop`: Call `can_manager.stop()`.
-    *   [x] Update imports in `main_live.py` to be relative.
-
-### Phase 4: Create Final Entry Point (Completed)
-
-*   [x] **Task 4.1: Write the Root `main.py`**
-    *   [x] Add code to set Python Path to include `src`.
-    *   [x] Import main components from `radar_tracker`.
-    *   [x] Configure application-wide logging.
-    *   [x] Launch the application.
-*   [x] **Task 4.2: Modify `src/radar_tracker/main.py`**
-    *   [x] Use relative imports.
-    *   [x] (Optional) Remove `setup_logging()` call.
-
-### Phase 5: GPIO Integration (Completed)
-
-*   [x] **Task 5.1: Implement GPIO Handler**
-    *   [x] Created `src/can_logger_app/gpio_handler.py` to encapsulate GPIO logic.
-    *   [x] Added `RPi.GPIO` dependency to `pyproject.toml`.
-    *   [x] Defined `BUTTON_PIN` in `config.py`.
-    *   [x] Modified `gpio_handler.py` to control the onboard LED (`turn_on_led`, `turn_off_led`).
-    *   [x] Modified `gpio_handler.py` to detect switch ON (`wait_for_switch_on`) and switch OFF (`check_for_switch_off`).
-*   [x] **Task 5.2: Integrate GPIO into Main Application**
-    *   [x] Modified root `main.py` to initialize GPIO, wait for the switch to be ON, turn on the LED, and handle graceful shutdown via a `shutdown_flag` and a separate thread for `check_for_switch_off`.
-    *   [x] Modified `src/radar_tracker/main.py` to accept and pass the `shutdown_flag` to `main_live`.
-    *   [x] Modified `src/radar_tracker/main_live.py` to respect the `shutdown_flag` for graceful termination.
-    *   [x] Added a final onboard LED turn OFF in `main.py` to indicate task completion upon shutdown.
-
-### Phase 6: CAN Logger Integration (Completed)
-
-*   [x] **Task 6.1: Integrate CAN Logger into Main Application**
-    *   [x] Modified root `main.py` to launch the `can_logger_app.main` in a separate multiprocessing process, ensuring CAN data is logged to a JSON file in parallel with the radar tracker.
-
-### Phase 8: Graceful Shutdown and Unified Logging (Completed)
-
-*   [x] **Task 8.1: Implement Graceful Shutdown**
-    *   [x] Modify `can_logger_app/main.py` to accept a `shutdown_flag`.
-    *   [x] Modify the root `main.py` to use a `multiprocessing.Event` for the `shutdown_flag` and pass it to all processes.
-    *   [x] Ensure the `can_logger_app` terminates gracefully and prints the final report.
-    *   [x] Implemented a `SIGTERM` handler in `can_logger_app/main.py` to ensure graceful shutdown on Windows.
-*   [x] **Task 8.2: Unify Log Output Directory**
-    *   [x] Modify `can_logger_app/main.py` to accept an `output_dir` argument.
-    *   [x] Modify the root `main.py` to pass the timestamped `output_dir` to the `can_logger_app`.
-*   [x] **Task 8.3: Improve Cross-Platform Compatibility**
-    *   [x] Make `gpio_handler` import conditional on the platform.
-    *   [x] Enable `can_logger_app` on non-Linux platforms.
-
-### Phase 9: Final Touches (Completed)
-
-*   [x] **Task 9.1: Resolve Windows Shutdown Issue**
-    *   [x] Modified `can_logger_app/main.py` to conditionally skip `bus.shutdown()` on Windows to prevent the "Timers cannot be stopped from another thread" error.
-*   [x] **Task 9.2: Add JSON Console Log**
-    *   [x] Created `src/radar_tracker/json_log_handler.py` to define a custom logging handler.
-    *   [x] Modified `src/radar_tracker/console_logger.py` to add the `JSONLogHandler` to the root logger.
-    *   [x] Modified root `main.py` to write the captured console logs to `console_log.json` upon shutdown.
-*   [x] **Task 9.3: Improve Console Output**
-    *   [x] Added console messages to `src/can_logger_app/main.py` to indicate the initialization of the CAN data dispatcher and log writer threads.
-
-*   [x] **Task 7.1: Refactor Application Startup Flow**
-    *   [x] Modified root `main.py` to prompt the user for "Live Tracking" or "Playback from File" mode *before* initializing GPIO and waiting for the physical switch.
-*   [x] **Task 7.2: Enhance CAN Service Robustness**
-    *   [x] Modified `src/can_service/live_can_manager.py` to include a pre-flight check for the CAN interface (`sudo ip link set can0 up`).
-    *   [x] Updated `src/can_service/live_can_manager.py` to handle `can.CanError` and `OSError` gracefully during CAN bus connection. If the CAN hardware is not detected, it now logs a warning and allows the application to continue without CAN functionality, instead of terminating.
-    *   [x] Removed the critical shutdown logic from `src/radar_tracker/main_live.py` that was triggered by a CAN service failure, allowing the radar tracker to operate even without CAN data.
-*   [x] **Task 7.3: Improve CAN Logger Error Handling**
-    *   [x] Corrected local imports in `src/can_logger_app/main.py` to use relative paths (e.g., `from . import utils`).
-    *   [x] Enhanced error messages in `src/can_logger_app/main.py` for CAN connection failures and the pre-flight check, providing clearer troubleshooting guidance.
-*   [x] **Task 7.4: Resolve `NameError`**
-    *   [x] Added `import platform` to `src/radar_tracker/main_live.py` to resolve a `NameError`.
+The application now runs as expected on Windows (in a dry run):
+* It starts and shuts down gracefully without the `QObject` error.
+* The `can_logger_app` process correctly reports "unseen" signals (as expected when no hardware is connected) and exits cleanly.
+* The `radar_tracker` runs, and the main application exits without errors.

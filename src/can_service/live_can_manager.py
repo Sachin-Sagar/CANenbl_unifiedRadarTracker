@@ -3,6 +3,7 @@ import threading
 import time
 import os
 from collections import deque
+import platform # <-- ADD THIS IMPORT
 
 import can
 import cantools
@@ -129,8 +130,13 @@ class LiveCANManager:
         if self.buffer_filler_thread and self.buffer_filler_thread.is_alive():
             self.buffer_filler_thread.join(timeout=2)
 
+        # --- THIS BLOCK IS MODIFIED ---
         if self.bus:
-            self.bus.shutdown()
+            # On Windows, calling shutdown() from a different thread than
+            # recv() causes a QObject timer error. We skip it.
+            if platform.system() != "Windows":
+                self.bus.shutdown()
+        # --- END OF MODIFICATION ---
         
         print("[+] CAN Service stopped.")
 

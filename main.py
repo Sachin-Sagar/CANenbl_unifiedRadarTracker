@@ -1,4 +1,3 @@
-
 import sys
 import os
 import platform
@@ -27,6 +26,12 @@ from src.radar_tracker.json_log_handler import JSONLogHandler
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
+    
+    # --- Create the Manager and shared data structures FIRST ---
+    manager = multiprocessing.Manager()
+    shutdown_flag = multiprocessing.Event()
+    shared_live_can_data = manager.dict() # This dict will be shared
+
     # Create a timestamped output directory
     output_dir = os.path.join("output", datetime.now().strftime('%Y%m%d_%H%M%S'))
     os.makedirs(output_dir, exist_ok=True)
@@ -45,7 +50,7 @@ if __name__ == '__main__':
 
     # If on Raspberry Pi, wait for switch to be turned on
     if platform.system() == "Linux":
-        shutdown_flag = multiprocessing.Event()
+        
         can_logger_process = None
         try:
             init_gpio()
@@ -56,7 +61,11 @@ if __name__ == '__main__':
 
             # Start the CAN logger in a separate process for live mode
             if mode == '1':
-                can_logger_process = multiprocessing.Process(target=can_logger_main, args=(shutdown_flag, output_dir,))
+                # MODIFIED: Pass the shared dict to the logger
+                can_logger_process = multiprocessing.Process(
+                    target=can_logger_main, 
+                    args=(shutdown_flag, output_dir, shared_live_can_data)
+                )
                 can_logger_process.start()
 
             # Start the stop signal checker in a separate thread
@@ -66,7 +75,8 @@ if __name__ == '__main__':
             # Launch the appropriate mode
             if mode == '1':
                 print("\nStarting in LIVE mode...")
-                main_live(output_dir, shutdown_flag)
+                # MODIFIED: Pass the shared dict to the live radar main
+                main_live(output_dir, shutdown_flag, shared_live_can_data)
             elif mode == '2':
                 print("\nStarting in PLAYBACK mode...")
                 run_playback(output_dir)
@@ -75,9 +85,12 @@ if __name__ == '__main__':
             shutdown_flag.set() # Signal all processes to shutdown
 
             if can_logger_process and can_logger_process.is_alive():
-                print("Terminating CAN logger...")
-                can_logger_process.terminate()
+                print("Signaling CAN logger to shut down...")
                 can_logger_process.join(timeout=5)
+                if can_logger_process.is_alive():
+                    print("CAN logger did not shut down, terminating...")
+                    can_logger_process.terminate()
+                    can_logger_process.join()
 
             if platform.system() == "Linux":
                 turn_off_led()
@@ -86,18 +99,26 @@ if __name__ == '__main__':
             print("Application shut down.")
 
     else: # Not on Linux
-        shutdown_flag = multiprocessing.Event()
+        
         can_logger_process = None
         live_thread = None
         try:
             if mode == '1':
                 print("\nStarting in LIVE mode...")
                 # Start the CAN logger process
-                can_logger_process = multiprocessing.Process(target=can_logger_main, args=(shutdown_flag, output_dir,))
+                # MODIFIED: Pass the shared dict to the logger
+                can_logger_process = multiprocessing.Process(
+                    target=can_logger_main, 
+                    args=(shutdown_flag, output_dir, shared_live_can_data)
+                )
                 can_logger_process.start()
                 
                 # Start the main_live function in a separate thread
-                live_thread = threading.Thread(target=main_live, args=(output_dir, shutdown_flag,))
+                # MODIFIED: Pass the shared dict to the live radar main
+                live_thread = threading.Thread(
+                    target=main_live, 
+                    args=(output_dir, shutdown_flag, shared_live_can_data)
+                )
                 live_thread.start()
                 
                 # Wait for the live thread to finish, allowing for Ctrl+C
@@ -117,9 +138,13 @@ if __name__ == '__main__':
                 live_thread.join(timeout=5)
 
             if can_logger_process and can_logger_process.is_alive():
-                print("Terminating CAN logger...")
-                can_logger_process.terminate()
-                can_logger_process.join(timeout=5)
+                print("Signaling CAN logger to shut down gracefully...")
+                can_logger_process.join(timeout=5) 
+
+                if can_logger_process.is_alive():
+                    print("CAN logger did not shut down, terminating...")
+                    can_logger_process.terminate()
+                    can_logger_process.join()
             
             # --- Write console logs to JSON ---
             for handler in logging.getLogger().handlers:
@@ -130,4 +155,3 @@ if __name__ == '__main__':
             # -------------------------------------
 
             print("Application shut down.")
-

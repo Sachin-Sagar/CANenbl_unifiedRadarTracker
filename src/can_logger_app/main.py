@@ -6,19 +6,20 @@ from datetime import datetime
 import multiprocessing
 import struct
 import signal
+import threading # <-- MODIFIED: Import threading
 
 # --- NOTE: Only modules needed by all processes remain at the top level ---
 
-def main(shutdown_flag=None, output_dir=None):
+def main(shutdown_flag=None, output_dir=None, live_data_dict=None):
     """
     Main function using a shared memory pipeline and a high-performance queue.
     
     Args:
         shutdown_flag (multiprocessing.Event, optional): Event to signal shutdown. Defaults to None.
         output_dir (str, optional): Directory to save log files. Defaults to None, which uses config.OUTPUT_DIRECTORY.
+        live_data_dict (multiprocessing.Manager.dict, optional): Shared dictionary to update with live CAN data.
     """
     # --- MODIFICATION: Imports are moved inside main() ---
-    # This prevents them from being executed by the spawned worker processes.
     import can
     import cantools
     from . import config
@@ -38,6 +39,9 @@ def main(shutdown_flag=None, output_dir=None):
     signal.signal(signal.SIGTERM, signal_handler)
 
     print("--- Real-Time CAN Logger ---")
+    if live_data_dict is not None:
+        print("--- (Live Radar Data Sharing ENABLED) ---")
+
 
     # --- Pre-flight checks: Bring up CAN interface on Linux ---
     if config.OS_SYSTEM == "Linux":
@@ -49,7 +53,6 @@ def main(shutdown_flag=None, output_dir=None):
         result = subprocess.run(command, shell=True, capture_output=True, text=True)
         
         if result.returncode != 0:
-            # If the error contains "Device or resource busy", it means the interface is already up.
             if "Device or resource busy" in result.stderr:
                 print(f" -> Interface '{config.CAN_CHANNEL}' is already up. Continuing.")
             else:
@@ -58,7 +61,7 @@ def main(shutdown_flag=None, output_dir=None):
                 print(f" -> STDERR: {result.stderr.strip()}")
                 print(f"\n -> This usually means the device '{config.CAN_CHANNEL}' does not exist.")
                 print(" -> Please check your CAN hardware connection and drivers.")
-                return # Exit if we can't bring up the interface
+                return 
         else:
             print(f" -> Interface '{config.CAN_CHANNEL}' brought up successfully.")
 
@@ -99,26 +102,42 @@ def main(shutdown_flag=None, output_dir=None):
     shared_mem_array = multiprocessing.RawArray('c', buffer_size)
     
     perf_tracker = manager.dict()
-    bus = None
+    # MODIFIED: Bus object is removed from here
     processes = []
     
     dispatcher_thread = None
     log_writer_thread = None
 
     try:
-        print(" -> Connecting to CAN hardware...")
-        bus = can.interface.Bus(
-            interface=config.CAN_INTERFACE,
-            channel=config.CAN_CHANNEL,
-            bitrate=config.CAN_BITRATE,
-            receive_own_messages=False
-        )
-        print(f" -> Connection successful on '{config.CAN_INTERFACE}' channel {config.CAN_CHANNEL}.")
-
+        # --- MODIFICATION: Create bus_params dict ---
+        bus_params = {
+            "interface": config.CAN_INTERFACE,
+            "channel": config.CAN_CHANNEL,
+            "bitrate": config.CAN_BITRATE,
+            "receive_own_messages": False
+        }
+        
+        # --- MODIFICATION: Create connection event ---
+        connection_event = threading.Event()
+        
         print(" -> Initializing CAN data dispatcher (CANReader) thread...")
-        dispatcher_thread = CANReader(bus=bus, data_queues={'high': raw_mp_queue, 'low': raw_mp_queue}, id_to_queue_map=id_to_queue_map, perf_tracker=perf_tracker)
+        dispatcher_thread = CANReader(
+            bus_params=bus_params, 
+            data_queues={'high': raw_mp_queue, 'low': raw_mp_queue}, 
+            id_to_queue_map=id_to_queue_map, 
+            perf_tracker=perf_tracker,
+            connection_event=connection_event
+        )
         dispatcher_thread.start()
         print(" -> CAN data dispatcher thread started.")
+        
+        # --- MODIFICATION: Wait for connection ---
+        print(" -> Waiting for CANReader thread to connect...")
+        connection_success = connection_event.wait(timeout=5.0) # Wait 5s
+        
+        if not connection_success:
+            # The event was not set; CANReader failed to connect
+            raise can.CanError(f"Failed to connect on '{config.CAN_INTERFACE}' channel {config.CAN_CHANNEL}. CANReader thread failed.")
 
         print(" -> Initializing log writer thread...")
         log_writer_thread = LogWriter(index_queue=index_mp_queue, shared_mem_array=shared_mem_array, filepath=output_filepath, perf_tracker=perf_tracker)
@@ -130,7 +149,7 @@ def main(shutdown_flag=None, output_dir=None):
         for i in range(num_processes):
             p = multiprocessing.Process(
                 target=processing_worker,
-                args=(i, decoding_rules, raw_mp_queue, index_mp_queue, shared_mem_array, results_queue, perf_tracker),
+                args=(i, decoding_rules, raw_mp_queue, index_mp_queue, shared_mem_array, results_queue, perf_tracker, live_data_dict),
                 daemon=True
             )
             processes.append(p)
@@ -141,6 +160,9 @@ def main(shutdown_flag=None, output_dir=None):
             if not all(p.is_alive() for p in processes):
                 print("\nError: One or more worker processes have died unexpectedly. Shutting down.")
                 break
+            if not dispatcher_thread.is_alive():
+                print("\nError: CANReader thread has died unexpectedly. Shutting down.")
+                break
             time.sleep(1) # Check every second
 
     except (KeyboardInterrupt, SystemExit):
@@ -150,7 +172,6 @@ def main(shutdown_flag=None, output_dir=None):
         print("FATAL: CAN LOGGER FAILED TO INITIALIZE".center(60))
         print("="*60)
         print(f"Error: {e}")
-        print(f"Could not connect to interface '{config.CAN_INTERFACE}' on channel '{config.CAN_CHANNEL}'.")
         print("\nTroubleshooting:")
         print(" 1. Is the CAN hardware (e.g., PCAN-USB) securely connected?")
         if config.OS_SYSTEM == "Linux":
@@ -185,9 +206,7 @@ def main(shutdown_flag=None, output_dir=None):
             log_writer_thread.stop()
             log_writer_thread.join(timeout=2)
         
-        if bus:
-            if not config.OS_SYSTEM == "Windows":
-                bus.shutdown()
+        # --- MODIFICATION: Removed all bus.shutdown() logic from this file ---
         
         print(" -> Workers stopped.")
         

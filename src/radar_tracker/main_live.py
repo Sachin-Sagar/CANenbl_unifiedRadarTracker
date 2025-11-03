@@ -23,7 +23,7 @@ from .tracking.update_and_save_history import update_and_save_history
 from .live_visualizer import LiveVisualizer
 from .json_logger import DataLogger
 from .console_logger import setup_logging
-from can_service.live_can_manager import LiveCANManager
+# --- REMOVED LiveCANManager ---
 import config as root_config
 from .tracking.utils.coordinate_transforms import interp_with_extrap
 
@@ -71,7 +71,8 @@ class RadarWorker(QObject):
     finished = pyqtSignal()
     close_visualizer = pyqtSignal()
 
-    def __init__(self, cli_com_port, config_file, output_dir, shutdown_flag=None):
+    # MODIFIED: Accepts shared_live_can_data dict
+    def __init__(self, cli_com_port, config_file, output_dir, shutdown_flag=None, shared_live_can_data=None):
         super().__init__()
         self.cli_com_port = cli_com_port
         self.config_file = config_file
@@ -85,10 +86,10 @@ class RadarWorker(QObject):
         self.data_logger = None
         self.shutdown_flag = shutdown_flag
         
-        # Initialize CAN Manager
-        dbc_path = os.path.join(root_config.INPUT_DIRECTORY, root_config.DBC_FILE)
-        signal_list_path = os.path.join(root_config.INPUT_DIRECTORY, root_config.SIGNAL_LIST_FILE)
-        self.can_manager = LiveCANManager(root_config, dbc_path, signal_list_path)
+        # MODIFIED: Store the shared dictionary, remove CAN manager
+        self.shared_live_can_data = shared_live_can_data
+        logging.info(f"RadarWorker initialized. Live CAN data sharing is {'ENABLED' if shared_live_can_data is not None else 'DISABLED'}.")
+
 
     def run(self):
         """The main processing loop."""
@@ -101,13 +102,17 @@ class RadarWorker(QObject):
         self.logger_thread.started.connect(self.data_logger.run)
         self.logger_thread.start()
 
-        # Start CAN service
-        self.can_manager.start()
+        # MODIFIED: Removed can_manager.start()
+        # The CAN logger process is already running, started by main.py
 
         # If on Raspberry Pi, blink LED to indicate successful start
         if platform.system() == "Linux":
-            from can_logger_app.gpio_handler import blink_onboard_led
-            blink_onboard_led(3)
+            try:
+                from can_logger_app.gpio_handler import blink_onboard_led
+                blink_onboard_led(3)
+            except ImportError:
+                logging.warning("Could not import gpio_handler to blink LED.")
+
 
         self.params_radar, self.h_data_port = self._configure_sensor()
         if not self.params_radar or not self.h_data_port:
@@ -157,13 +162,19 @@ class RadarWorker(QObject):
 
     def _interpolate_can_data(self, radar_timestamp_ms):
         can_data_for_frame = {}
-        can_buffers = self.can_manager.get_signal_buffers()
+        # MODIFIED: Read from the shared dict
+        if self.shared_live_can_data is None:
+            return {}
+            
+        # Create a local, non-proxy copy for safe iteration
+        can_buffers = dict(self.shared_live_can_data)
         radar_posix_timestamp = radar_timestamp_ms / 1000.0
 
         for signal_name, buffer in can_buffers.items():
             if not buffer:
                 continue
-
+            
+            # The buffer is a list of (timestamp, value) tuples
             timestamps = [item[0] for item in buffer]
             values = [item[1] for item in buffer]
 
@@ -235,22 +246,27 @@ class RadarWorker(QObject):
             self.logger_thread.quit()
             self.logger_thread.wait()
 
-        if self.can_manager:
-            self.can_manager.stop()
-
+        # MODIFIED: Removed can_manager.stop()
+        
         if self.h_data_port and self.h_data_port.is_open:
             self.h_data_port.close()
             logging.info("--- Serial port closed ---")
 
-def main(output_dir, shutdown_flag=None):
+# MODIFIED: main() now accepts the shared dict
+def main(output_dir, shutdown_flag=None, shared_live_can_data=None):
     """Main application entry point."""
-    # --- THIS IS THE FIX ---
-    # The setup_logging() call is removed from here to prevent double-logging.
-    # It is now only called once in the main.py entry point.
-    # --- END OF FIX ---
     app = QApplication(sys.argv)
     worker_thread = QThread()
-    radar_worker = RadarWorker(CLI_COMPORT_NUM, CONFIG_FILE_PATH, output_dir, shutdown_flag)
+    
+    # MODIFIED: Pass the shared dict to the worker
+    radar_worker = RadarWorker(
+        CLI_COMPORT_NUM, 
+        CONFIG_FILE_PATH, 
+        output_dir, 
+        shutdown_flag,
+        shared_live_can_data
+    )
+    
     radar_worker.moveToThread(worker_thread)
     visualizer = LiveVisualizer(radar_worker, worker_thread)
     radar_worker.close_visualizer.connect(visualizer.close)
