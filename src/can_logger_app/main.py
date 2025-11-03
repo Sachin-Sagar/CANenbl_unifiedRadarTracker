@@ -16,14 +16,37 @@ def main():
     # This prevents them from being executed by the spawned worker processes.
     import can
     import cantools
-    import config
-    import utils
-    from can_handler import CANReader
-    from data_processor import processing_worker, LOG_ENTRY_FORMAT
-    from log_writer import LogWriter
+    from . import config
+    from . import utils
+    from .can_handler import CANReader
+    from .data_processor import processing_worker, LOG_ENTRY_FORMAT
+    from .log_writer import LogWriter
     # --------------------------------------------------------
 
     print("--- Real-Time CAN Logger ---")
+
+    # --- Pre-flight checks: Bring up CAN interface on Linux ---
+    if config.OS_SYSTEM == "Linux":
+        print("\n[+] Ensuring CAN interface is up...")
+        command = f"sudo ip link set {config.CAN_CHANNEL} up type can bitrate {config.CAN_BITRATE}"
+        print(f" -> Running: {command}")
+        
+        import subprocess
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            # If the error contains "Device or resource busy", it means the interface is already up.
+            if "Device or resource busy" in result.stderr:
+                print(f" -> Interface '{config.CAN_CHANNEL}' is already up. Continuing.")
+            else:
+                print(f"\nError: Failed to bring up CAN interface '{config.CAN_CHANNEL}'.")
+                print(f" -> The command 'sudo ip link set {config.CAN_CHANNEL} up' failed.")
+                print(f" -> STDERR: {result.stderr.strip()}")
+                print(f"\n -> This usually means the device '{config.CAN_CHANNEL}' does not exist.")
+                print(" -> Please check your CAN hardware connection and drivers.")
+                return # Exit if we can't bring up the interface
+        else:
+            print(f" -> Interface '{config.CAN_CHANNEL}' brought up successfully.")
 
     # --- 1. Load Configuration ---
     print("\n[+] Loading configuration...")
@@ -86,8 +109,6 @@ def main():
         num_processes = (os.cpu_count() or 2) - 1
         print(f" -> Starting {num_processes} decoding processes...")
         for i in range(num_processes):
-            # We need to re-import here so the Process object can find the target
-            from data_processor import processing_worker
             p = multiprocessing.Process(
                 target=processing_worker,
                 args=(i, decoding_rules, raw_mp_queue, index_mp_queue, shared_mem_array, results_queue, perf_tracker),
@@ -105,8 +126,20 @@ def main():
 
     except (KeyboardInterrupt, SystemExit):
         print("\n\n[+] Ctrl-C detected. Shutting down gracefully...")
-    except can.CanError as e:
-        print(f"\nFATAL ERROR: {e}")
+    except (can.CanError, OSError) as e:
+        print("\n" + "="*60)
+        print("FATAL: CAN LOGGER FAILED TO INITIALIZE".center(60))
+        print("="*60)
+        print(f"Error: {e}")
+        print(f"Could not connect to interface '{config.CAN_INTERFACE}' on channel '{config.CAN_CHANNEL}'.")
+        print("\nTroubleshooting:")
+        print(" 1. Is the CAN hardware (e.g., PCAN-USB) securely connected?")
+        if config.OS_SYSTEM == "Linux":
+            print(" 2. Is the correct kernel driver loaded? (e.g., 'peak_usb')")
+            print(f" 3. Does the CAN interface '{config.CAN_CHANNEL}' exist? (check with 'ip link show')")
+        else: # Windows
+            print(" 2. Are the necessary drivers (e.g., PCAN-Basic) installed?")
+        print("="*60 + "\n")
     finally:
         print(" -> Stopping worker threads and processes...")
         
@@ -148,12 +181,21 @@ def main():
         
         unseen_signals = all_monitoring_signals - logged_signals_set
 
+        # --- Final Report: Logged and Unseen Signals ---
+        print("\n--- Data Logging Summary ---")
+        if logged_signals_set:
+            print("The following signals were successfully logged at least once:")
+            for signal in sorted(list(logged_signals_set)):
+                print(f" - [LOGGED] {signal}")
+        else:
+            print("Warning: No signals from the monitoring list were logged.")
+
         if unseen_signals:
-            print("\nWarning: The following signals were never logged:")
+            print("\nThe following signals were on the monitoring list but were NEVER logged:")
             for signal in sorted(list(unseen_signals)):
-                print(f" - {signal}")
+                print(f" - [UNSEEN] {signal}")
         elif logged_signals_set:
-            print("\n -> All signals in the monitoring list were logged at least once.")
+            print("\n -> All signals in the monitoring list were logged successfully.")
         
         print(" -> Logging complete.")
         

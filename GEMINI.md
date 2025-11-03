@@ -182,3 +182,17 @@ This section tracks the progress of merging the `Read_CAN_RT_strip` and `Unified
 
 *   [x] **Task 6.1: Integrate CAN Logger into Main Application**
     *   [x] Modified root `main.py` to launch the `can_logger_app.main` in a separate multiprocessing process, ensuring CAN data is logged to a JSON file in parallel with the radar tracker.
+
+### Phase 7: Application Robustness and Flow Control (Completed)
+
+*   [x] **Task 7.1: Refactor Application Startup Flow**
+    *   [x] Modified root `main.py` to prompt the user for "Live Tracking" or "Playback from File" mode *before* initializing GPIO and waiting for the physical switch.
+*   [x] **Task 7.2: Enhance CAN Service Robustness**
+    *   [x] Modified `src/can_service/live_can_manager.py` to include a pre-flight check for the CAN interface (`sudo ip link set can0 up`).
+    *   [x] Updated `src/can_service/live_can_manager.py` to handle `can.CanError` and `OSError` gracefully during CAN bus connection. If the CAN hardware is not detected, it now logs a warning and allows the application to continue without CAN functionality, instead of terminating.
+    *   [x] Removed the critical shutdown logic from `src/radar_tracker/main_live.py` that was triggered by a CAN service failure, allowing the radar tracker to operate even without CAN data.
+*   [x] **Task 7.3: Improve CAN Logger Error Handling**
+    *   [x] Corrected local imports in `src/can_logger_app/main.py` to use relative paths (e.g., `from . import utils`).
+    *   [x] Enhanced error messages in `src/can_logger_app/main.py` for CAN connection failures and the pre-flight check, providing clearer troubleshooting guidance.
+*   [x] **Task 7.4: Resolve `NameError`**
+    *   [x] Added `import platform` to `src/radar_tracker/main_live.py` to resolve a `NameError`.

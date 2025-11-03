@@ -117,7 +117,7 @@ pip install -r requirements.txt
 
 ### CAN Configuration
 
-*   **Hardware Settings:** The CAN interface (`pcan` or `socketcan`), channel, and bitrate are configured in the root `config.py` file. The application will auto-detect the OS, but you can modify these settings if needed.
+*   **Hardware Settings:** The CAN interface (`pcan` or `socketcan`), channel, and bitrate are configured in `src/can_logger_app/config.py`. The application will auto-detect the OS and attempt to bring up the interface automatically on Linux. If the CAN hardware is not detected or cannot be brought up, the application will log a warning and continue without CAN data.
 *   **DBC File:** Place your CAN database file (e.g., `VCU.dbc`) in the `input/` directory.
 *   **Signal List:** The list of signals to be logged and used by the tracker is defined in `input/master_sigList.txt`. The format is `CAN_ID,Signal_Name,CycleTime`.
 
@@ -127,21 +127,15 @@ pip install -r requirements.txt
     ```bash
     source .venv/bin/activate
     ```
-
-2.  **(Linux Only) Bring up the CAN interface:**
-    ```bash
-    sudo ip link set can0 up type can bitrate 500000
-    ```
-
 3.  **Run the application:**
     ```bash
     python main.py
     ```
 
-    *   **On Raspberry Pi:** The application will initialize and then wait for the physical switch (connected to GPIO 17) to be turned **ON** to start the radar tracking and CAN logging. To stop the application, turn the switch **OFF**.
-    *   **On other systems:** The application will start immediately.
-
-4.  **Select a mode:** The script will prompt you to choose between **(1) Live Tracking** or **(2) Playback from File**.
+    *   **Select a mode:** The script will first prompt you to choose between **(1) Live Tracking** or **(2) Playback from File**.
+    *   **On Raspberry Pi (Live Mode):** After selecting Live Mode, the application will initialize and then wait for the physical switch (connected to GPIO 17) to be turned **ON** to start the radar tracking and CAN logging. To stop the application, turn the switch **OFF**.
+    *   **On other systems (Live Mode):** The application will start immediately after mode selection.
+    *   **CAN Hardware Note:** If CAN hardware is not detected or configured correctly, the application will log a warning and continue without CAN data, allowing the radar tracker to function independently.
 
 ## 7. Testing
 
@@ -150,7 +144,3 @@ A unit test is available to perform a sanity check on the CAN service integratio
 ```bash
 python -m unittest tests/test_can_service.py
 ```
-
-
-use: sudo ip link set can0 up type can bitrate 500000
-after connecting peak

@@ -8,6 +8,7 @@ import logging
 import psutil
 import os
 import serial.tools.list_ports
+import platform
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QThread, pyqtSignal, QObject

@@ -8,24 +8,6 @@ import subprocess
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
-if platform.system() == "Linux":
-    print("Detected Linux OS. Attempting to bring up CAN interface 'can0'...")
-    try:
-        # This command requires sudo privileges and might prompt for a password.
-        # The user has explicitly requested this command to be run.
-        result = subprocess.run(["sudo", "ip", "link", "set", "can0", "up", "type", "can", "bitrate", "500000"], check=True, capture_output=True, text=True)
-        print("CAN interface 'can0' brought up successfully.")
-    except subprocess.CalledProcessError as e:
-        if "Device or resource busy" in e.stderr:
-            print("CAN interface 'can0' is already up. Continuing...")
-        else:
-            print(f"Error bringing up CAN interface: {e}")
-            print(e.stderr)
-            print("Please ensure 'can-utils' is installed and you have appropriate permissions.")
-            sys.exit(1)
-    except FileNotFoundError:
-        print("Error: 'ip' command not found. Please ensure 'iproute2' is installed.")
-        sys.exit(1)
 
 from radar_tracker.main import main as radar_main
 from radar_tracker.console_logger import setup_logging
@@ -35,6 +17,9 @@ import platform
 import threading
 import multiprocessing
 from can_logger_app.main import main as can_logger_main
+from radar_tracker.main_live import main as main_live
+from radar_tracker.main_playback import run_playback
+
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
@@ -45,6 +30,15 @@ if __name__ == '__main__':
     # Configure logging for the entire application
     setup_logging(output_dir)
 
+    # --- Ask for mode first ---
+    print("--- Welcome to the Unified Radar Tracker ---")
+    while True:
+        mode = input("Select mode: (1) Live Tracking or (2) Playback from File\nEnter choice (1 or 2): ")
+        if mode in ['1', '2']:
+            break
+        else:
+            print("Invalid choice. Please enter 1 or 2.")
+
     # If on Raspberry Pi, wait for switch to be turned on
     if platform.system() == "Linux":
         shutdown_flag = threading.Event()
@@ -52,19 +46,28 @@ if __name__ == '__main__':
         can_logger_process = None
         try:
             init_gpio()
+            print("Waiting for switch ON...")
             wait_for_switch_on()
+            print("Switch is ON!")
             turn_on_led()
 
-            # Start the CAN logger in a separate process
-            can_logger_process = multiprocessing.Process(target=can_logger_main)
-            can_logger_process.start()
+            # Start the CAN logger in a separate process for live mode
+            if mode == '1':
+                can_logger_process = multiprocessing.Process(target=can_logger_main)
+                can_logger_process.start()
 
             # Start the stop signal checker in a separate thread
             stop_thread = threading.Thread(target=check_for_switch_off, args=(stop_event, shutdown_flag))
             stop_thread.start()
 
-            # Launch the radar application
-            radar_main(output_dir, shutdown_flag)
+            # Launch the appropriate mode
+            if mode == '1':
+                print("\nStarting in LIVE mode...")
+                main_live(output_dir, shutdown_flag)
+            elif mode == '2':
+                print("\nStarting in PLAYBACK mode...")
+                run_playback(output_dir)
+
         finally:
             stop_event.set()
             if can_logger_process and can_logger_process.is_alive():
@@ -73,7 +76,15 @@ if __name__ == '__main__':
             if platform.system() == "Linux":
                 turn_off_led()
             cleanup_gpio()
-    else:
-        # Launch the radar application directly on other systems
-        radar_main(output_dir)
+            print("Switch is OFF! Stopping...")
+
+    else: # Not on Linux
+        # Launch the appropriate mode directly
+        if mode == '1':
+            print("\nStarting in LIVE mode...")
+            # Note: CAN logging and GPIO are not supported on non-Linux systems in this setup
+            main_live(output_dir)
+        elif mode == '2':
+            print("\nStarting in PLAYBACK mode...")
+            run_playback(output_dir)
 
