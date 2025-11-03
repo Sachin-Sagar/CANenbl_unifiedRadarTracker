@@ -129,8 +129,11 @@ All output data from a single session is saved into a unique, timestamped direct
     *   **CAN Log:** `can_log_YYYY-MM-DD_HH-MM-SS.json` - A JSON Lines file containing all decoded CAN signals.
     *   **Radar Log:** `radar_log.json` - A log of the raw data frames from the radar sensor.
     *   **Track History:** `track_history.json` - The final, processed tracking data.
+    *   **Console Log:** `console_log.json` - A JSON file containing all the console output from the application, useful for debugging.
 
 Upon shutdown, the CAN logger will print a **Data Logging Summary** to the console. This report details which signals from the monitoring list were successfully logged and which (if any) were never seen on the bus. This is useful for verifying that the CAN interface is working as expected.
+
+During startup, you will see console messages indicating the initialization of the CAN data dispatcher and log writer threads, providing a clear view of the application's startup sequence.
 
 ## 7. Usage
 
@@ -146,7 +149,7 @@ Upon shutdown, the CAN logger will print a **Data Logging Summary** to the conso
 
     *   **Select a mode:** The script will first prompt you to choose between **(1) Live Tracking** or **(2) Playback from File**.
     *   **On Raspberry Pi (Live Mode):** After selecting Live Mode, the application will initialize and then wait for the physical switch (connected to GPIO 17) to be turned **ON** to start the radar tracking and CAN logging. To stop the application, turn the switch **OFF**.
-    *   **On Windows/other systems (Live Mode):** The application will start immediately after mode selection. To stop the application, close the visualization window.
+    *   **On Windows/other systems (Live Mode):** The application will start immediately after mode selection. To stop the application, close the visualization window. The application is designed to detect the window closure and shut down gracefully.
 
     In all cases, the application is designed to shut down gracefully. This ensures that all data is saved correctly and that a final diagnostic report for the CAN logger is printed to the console.
 

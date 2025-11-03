@@ -115,11 +115,15 @@ def main(shutdown_flag=None, output_dir=None):
         )
         print(f" -> Connection successful on '{config.CAN_INTERFACE}' channel {config.CAN_CHANNEL}.")
 
+        print(" -> Initializing CAN data dispatcher (CANReader) thread...")
         dispatcher_thread = CANReader(bus=bus, data_queues={'high': raw_mp_queue, 'low': raw_mp_queue}, id_to_queue_map=id_to_queue_map, perf_tracker=perf_tracker)
         dispatcher_thread.start()
+        print(" -> CAN data dispatcher thread started.")
 
+        print(" -> Initializing log writer thread...")
         log_writer_thread = LogWriter(index_queue=index_mp_queue, shared_mem_array=shared_mem_array, filepath=output_filepath, perf_tracker=perf_tracker)
         log_writer_thread.start()
+        print(" -> Log writer thread started.")
 
         num_processes = (os.cpu_count() or 2) - 1
         print(f" -> Starting {num_processes} decoding processes...")
@@ -182,7 +186,8 @@ def main(shutdown_flag=None, output_dir=None):
             log_writer_thread.join(timeout=2)
         
         if bus:
-            bus.shutdown()
+            if not config.OS_SYSTEM == "Windows":
+                bus.shutdown()
         
         print(" -> Workers stopped.")
         

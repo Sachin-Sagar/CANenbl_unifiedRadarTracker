@@ -189,12 +189,24 @@ This section tracks the progress of merging the `Read_CAN_RT_strip` and `Unified
     *   [x] Modify `can_logger_app/main.py` to accept a `shutdown_flag`.
     *   [x] Modify the root `main.py` to use a `multiprocessing.Event` for the `shutdown_flag` and pass it to all processes.
     *   [x] Ensure the `can_logger_app` terminates gracefully and prints the final report.
+    *   [x] Implemented a `SIGTERM` handler in `can_logger_app/main.py` to ensure graceful shutdown on Windows.
 *   [x] **Task 8.2: Unify Log Output Directory**
     *   [x] Modify `can_logger_app/main.py` to accept an `output_dir` argument.
     *   [x] Modify the root `main.py` to pass the timestamped `output_dir` to the `can_logger_app`.
 *   [x] **Task 8.3: Improve Cross-Platform Compatibility**
     *   [x] Make `gpio_handler` import conditional on the platform.
     *   [x] Enable `can_logger_app` on non-Linux platforms.
+
+### Phase 9: Final Touches (Completed)
+
+*   [x] **Task 9.1: Resolve Windows Shutdown Issue**
+    *   [x] Modified `can_logger_app/main.py` to conditionally skip `bus.shutdown()` on Windows to prevent the "Timers cannot be stopped from another thread" error.
+*   [x] **Task 9.2: Add JSON Console Log**
+    *   [x] Created `src/radar_tracker/json_log_handler.py` to define a custom logging handler.
+    *   [x] Modified `src/radar_tracker/console_logger.py` to add the `JSONLogHandler` to the root logger.
+    *   [x] Modified root `main.py` to write the captured console logs to `console_log.json` upon shutdown.
+*   [x] **Task 9.3: Improve Console Output**
+    *   [x] Added console messages to `src/can_logger_app/main.py` to indicate the initialization of the CAN data dispatcher and log writer threads.
 
 *   [x] **Task 7.1: Refactor Application Startup Flow**
     *   [x] Modified root `main.py` to prompt the user for "Live Tracking" or "Playback from File" mode *before* initializing GPIO and waiting for the physical switch.
