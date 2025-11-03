@@ -183,7 +183,18 @@ This section tracks the progress of merging the `Read_CAN_RT_strip` and `Unified
 *   [x] **Task 6.1: Integrate CAN Logger into Main Application**
     *   [x] Modified root `main.py` to launch the `can_logger_app.main` in a separate multiprocessing process, ensuring CAN data is logged to a JSON file in parallel with the radar tracker.
 
-### Phase 7: Application Robustness and Flow Control (Completed)
+### Phase 8: Graceful Shutdown and Unified Logging (Completed)
+
+*   [x] **Task 8.1: Implement Graceful Shutdown**
+    *   [x] Modify `can_logger_app/main.py` to accept a `shutdown_flag`.
+    *   [x] Modify the root `main.py` to use a `multiprocessing.Event` for the `shutdown_flag` and pass it to all processes.
+    *   [x] Ensure the `can_logger_app` terminates gracefully and prints the final report.
+*   [x] **Task 8.2: Unify Log Output Directory**
+    *   [x] Modify `can_logger_app/main.py` to accept an `output_dir` argument.
+    *   [x] Modify the root `main.py` to pass the timestamped `output_dir` to the `can_logger_app`.
+*   [x] **Task 8.3: Improve Cross-Platform Compatibility**
+    *   [x] Make `gpio_handler` import conditional on the platform.
+    *   [x] Enable `can_logger_app` on non-Linux platforms.
 
 *   [x] **Task 7.1: Refactor Application Startup Flow**
     *   [x] Modified root `main.py` to prompt the user for "Live Tracking" or "Playback from File" mode *before* initializing GPIO and waiting for the physical switch.

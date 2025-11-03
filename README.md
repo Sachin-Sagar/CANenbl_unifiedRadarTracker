@@ -121,23 +121,36 @@ pip install -r requirements.txt
 *   **DBC File:** Place your CAN database file (e.g., `VCU.dbc`) in the `input/` directory.
 *   **Signal List:** The list of signals to be logged and used by the tracker is defined in `input/master_sigList.txt`. The format is `CAN_ID,Signal_Name,CycleTime`.
 
-## 6. Usage
+## 6. Data Logging
+
+All output data from a single session is saved into a unique, timestamped directory to prevent overwriting and to keep logs organized.
+
+*   **Output Directory:** `output/YYYYMMDD_HHMMSS/`
+    *   **CAN Log:** `can_log_YYYY-MM-DD_HH-MM-SS.json` - A JSON Lines file containing all decoded CAN signals.
+    *   **Radar Log:** `radar_log.json` - A log of the raw data frames from the radar sensor.
+    *   **Track History:** `track_history.json` - The final, processed tracking data.
+
+Upon shutdown, the CAN logger will print a **Data Logging Summary** to the console. This report details which signals from the monitoring list were successfully logged and which (if any) were never seen on the bus. This is useful for verifying that the CAN interface is working as expected.
+
+## 7. Usage
 
 1.  **Activate your virtual environment:**
     ```bash
     source .venv/bin/activate
     ```
-3.  **Run the application:**
+
+2.  **Run the application:**
     ```bash
     python main.py
     ```
 
     *   **Select a mode:** The script will first prompt you to choose between **(1) Live Tracking** or **(2) Playback from File**.
     *   **On Raspberry Pi (Live Mode):** After selecting Live Mode, the application will initialize and then wait for the physical switch (connected to GPIO 17) to be turned **ON** to start the radar tracking and CAN logging. To stop the application, turn the switch **OFF**.
-    *   **On other systems (Live Mode):** The application will start immediately after mode selection.
-    *   **CAN Hardware Note:** If CAN hardware is not detected or configured correctly, the application will log a warning and continue without CAN data, allowing the radar tracker to function independently.
+    *   **On Windows/other systems (Live Mode):** The application will start immediately after mode selection. To stop the application, close the visualization window.
 
-## 7. Testing
+    In all cases, the application is designed to shut down gracefully. This ensures that all data is saved correctly and that a final diagnostic report for the CAN logger is printed to the console.
+
+## 8. Testing
 
 A unit test is available to perform a sanity check on the CAN service integration. This test mocks the CAN hardware and can be run without any connected devices.
 

@@ -93,7 +93,7 @@ dependencies = [
     { name = "pyqtgraph" },
     { name = "pyserial" },
     { name = "python-can" },
-    { name = "rpi-gpio" },
+    { name = "rpi-gpio", marker = "sys_platform == 'linux'" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.16.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
@@ -112,7 +112,7 @@ requires-dist = [
     { name = "pyqtgraph" },
     { name = "pyserial" },
     { name = "python-can" },
-    { name = "rpi-gpio" },
+    { name = "rpi-gpio", marker = "sys_platform == 'linux'" },
     { name = "scipy" },
 ]
 

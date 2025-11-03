@@ -19,7 +19,7 @@ dependencies = [
     "pyqtgraph",
     "scipy",
     "psutil",
-    "RPi.GPIO",
+    "RPi.GPIO; sys_platform == 'linux'",
 ]
 
 [dependency-groups]

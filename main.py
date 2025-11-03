@@ -52,7 +52,7 @@ if __name__ == '__main__':
 
             # Start the CAN logger in a separate process for live mode
             if mode == '1':
-                can_logger_process = multiprocessing.Process(target=can_logger_main, args=(shutdown_flag,))
+                can_logger_process = multiprocessing.Process(target=can_logger_main, args=(shutdown_flag, output_dir,))
                 can_logger_process.start()
 
             # Start the stop signal checker in a separate thread
@@ -92,7 +92,7 @@ if __name__ == '__main__':
             if mode == '1':
                 print("\nStarting in LIVE mode...")
                 # Start the CAN logger in a separate process for live mode
-                can_logger_process = multiprocessing.Process(target=can_logger_main, args=(shutdown_flag,))
+                can_logger_process = multiprocessing.Process(target=can_logger_main, args=(shutdown_flag, output_dir,))
                 can_logger_process.start()
                 main_live(output_dir, shutdown_flag)
             elif mode == '2':

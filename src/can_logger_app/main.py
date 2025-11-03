@@ -8,12 +8,13 @@ import struct
 
 # --- NOTE: Only modules needed by all processes remain at the top level ---
 
-def main(shutdown_flag=None):
+def main(shutdown_flag=None, output_dir=None):
     """
     Main function using a shared memory pipeline and a high-performance queue.
     
     Args:
         shutdown_flag (multiprocessing.Event, optional): Event to signal shutdown. Defaults to None.
+        output_dir (str, optional): Directory to save log files. Defaults to None, which uses config.OUTPUT_DIRECTORY.
     """
     # --- MODIFICATION: Imports are moved inside main() ---
     # This prevents them from being executed by the spawned worker processes.
@@ -70,8 +71,9 @@ def main(shutdown_flag=None):
     print(" -> Pre-compiling decoding rules...")
     decoding_rules = utils.precompile_decoding_rules(db, {**high_freq_signals, **low_freq_signals})
     
-    output_filepath = os.path.join(config.OUTPUT_DIRECTORY, f"can_log_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json")
-    os.makedirs(config.OUTPUT_DIRECTORY, exist_ok=True)
+    target_output_dir = output_dir if output_dir else config.OUTPUT_DIRECTORY
+    output_filepath = os.path.join(target_output_dir, f"can_log_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json")
+    os.makedirs(target_output_dir, exist_ok=True)
     print(f" -> Output will be saved to: '{output_filepath}'")
 
     # --- 2. Initialize Multiprocessing Components ---
