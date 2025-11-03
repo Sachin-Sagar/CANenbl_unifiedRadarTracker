@@ -87,26 +87,42 @@ if __name__ == '__main__':
     else: # Not on Linux
         shutdown_flag = multiprocessing.Event()
         can_logger_process = None
+        live_thread = None
         try:
-            # Launch the appropriate mode directly
             if mode == '1':
                 print("\nStarting in LIVE mode...")
-                # Start the CAN logger in a separate process for live mode
+                # Start the CAN logger process
                 can_logger_process = multiprocessing.Process(target=can_logger_main, args=(shutdown_flag, output_dir,))
                 can_logger_process.start()
-                main_live(output_dir, shutdown_flag)
+                
+                # Start the main_live function in a separate thread
+                live_thread = threading.Thread(target=main_live, args=(output_dir, shutdown_flag,))
+                live_thread.start()
+                
+                # Wait for Ctrl+C
+                while live_thread.is_alive():
+                    live_thread.join(timeout=1) # Use timeout to allow checking for keyboard interrupt
+
             elif mode == '2':
                 print("\nStarting in PLAYBACK mode...")
                 run_playback(output_dir)
 
+        except KeyboardInterrupt:
+            print("\nCtrl+C detected. Shutting down...")
         finally:
+            shutdown_flag.set() # Signal all processes to shutdown
+
+            if live_thread and live_thread.is_alive():
+                print("Waiting for live tracker to finish...")
+                live_thread.join(timeout=5)
+
             if can_logger_process and can_logger_process.is_alive():
                 print("Waiting for CAN logger to finish...")
-                shutdown_flag.set() # Signal CAN logger to shutdown
-                can_logger_process.join(timeout=5) # Wait for the logger to finish
+                can_logger_process.join(timeout=5)
                 if can_logger_process.is_alive():
                     print("CAN logger did not exit gracefully, terminating.")
                     can_logger_process.terminate()
-                can_logger_process.join()
+                    can_logger_process.join()
+            
             print("Application shut down.")
 
