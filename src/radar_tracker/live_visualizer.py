@@ -49,6 +49,11 @@ class LiveVisualizer(QMainWindow):
         """
         Updates the plot with new point cloud data.
         """
+        # --- NEW: Update the title with the current frame number ---
+        if self.worker and self.worker.tracker:
+            frame_idx = self.worker.tracker.frame_idx
+            self.plot_widget.setTitle(f"Live Radar View - Frame: {frame_idx}", color="w", size="20pt")
+
         if frame_data and frame_data.point_cloud is not None and frame_data.point_cloud.size > 0:
             x_coords = frame_data.point_cloud[1, :]
             y_coords = frame_data.point_cloud[2, :]

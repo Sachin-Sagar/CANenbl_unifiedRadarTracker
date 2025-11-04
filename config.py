@@ -33,10 +33,36 @@ else:
     CAN_CHANNEL = 0
 
 
-# --- General Settings ---
-# Set to True to enable verbose debug printing, False to disable.
-DEBUG_PRINTING = False
+# --- NEW: Granular Debug Flags ---
+# Set individual flags to True to enable specific debug messages.
+DEBUG_FLAGS = {
+    # Logs the raw shared CAN data and the result of the interpolation
+    # in src/radar_tracker/main_live.py
+    'log_can_interpolation': True,
 
+    # Logs the CAN data as it is being adapted into the FHistFrame
+    # in src/radar_tracker/data_adapter.py
+    'log_can_data_adapter': True,
+
+    # Logs the egoVx value at the entry point of the main tracker algorithm
+    # in src/radar_tracker/tracking/tracker.py
+    'log_tracker_entry': True,
+
+    # Logs the egoVx value from the final history before it's saved to JSON
+    # in src/radar_tracker/tracking/update_and_save_history.py
+    'log_final_history': True,
+}
+
+# --- Component-Specific Debug Flags ---
+# Enable/disable verbose debug messages for specific tracking components.
+COMPONENT_DEBUG_FLAGS = {
+    'dbscan': False,
+    'ransac': False,
+    'tracker_core': False, # For general tracker logic in tracker.py
+    'jpda': False,
+    'imm_filter': False,
+    # Add other components as needed
+}
 
 # --- File and Directory Paths ---
 # The script will look for the input files in this directory.

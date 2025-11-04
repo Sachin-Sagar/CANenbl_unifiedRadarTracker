@@ -2,6 +2,8 @@
 
 import numpy as np
 import numbers # <-- Import the numbers module for type checking
+import logging
+import config
 
 # Import all the necessary components from the tracking module
 from .perform_track_assignment_master import perform_track_assignment_master
@@ -42,6 +44,12 @@ class RadarTracker:
         motion data (like egoVx) is now expected to be pre-populated in the
         'current_frame' object by the data adapter.
         """
+        if config.DEBUG_FLAGS.get('log_tracker_entry'):
+            logging.debug(f"[TRACKER] Frame {self.frame_idx}: Entry egoVx = {current_frame.egoVx:.2f} m/s")
+
+        if config.COMPONENT_DEBUG_FLAGS.get('tracker_core'):
+            logging.debug(f"[TRACKER_CORE] Processing Frame: {self.frame_idx}, Delta_t: {delta_t:.4f}s")
+
         # Calculate delta_t
         delta_t = (current_frame.timestamp - self.last_timestamp_ms) / 1000.0 if self.frame_idx > 0 else 0.05
         if delta_t <= 0: delta_t = 0.05
@@ -66,6 +74,8 @@ class RadarTracker:
             self.right_turn_state, self.left_turn_state
         )
         current_frame.motionState = motion_state
+        if config.COMPONENT_DEBUG_FLAGS.get('tracker_core'):
+            logging.debug(f"[TRACKER_CORE] Motion State: {motion_state}")
 
         (self.ego_kf_state, self.filtered_vx_ego_iir, self.filtered_vy_ego_iir,
          ransac_vx, ransac_vy, _, ax_dynamics, outlier_indices) = estimate_ego_motion(
@@ -82,6 +92,8 @@ class RadarTracker:
         # preserve the original CAN value in the final history. We only take the
         # estimated lateral velocity (egoVy) from the filter.
         current_frame.egoVy = self.ego_kf_state['x'][1, 0]
+        if config.COMPONENT_DEBUG_FLAGS.get('tracker_core'):
+            logging.debug(f"[TRACKER_CORE] EgoVx (CAN-derived): {current_frame.egoVx:.2f}, EgoVy (EKF-derived): {current_frame.egoVy:.2f}")
 
         all_indices = np.arange(num_points)
         static_inlier_indices = np.setdiff1d(all_indices, outlier_indices, assume_unique=True)
@@ -104,6 +116,8 @@ class RadarTracker:
 
         # --- Clustering and Filtering ---
         detected_centroids, detected_cluster_info = np.empty((0, 2)), []
+        if config.COMPONENT_DEBUG_FLAGS.get('tracker_core'):
+            logging.debug(f"[TRACKER_CORE] Number of points for clustering: {num_points}")
         if num_points >= self.params['dbscan_params']['min_pts']:
             grid_map, point_to_grid_idx = slot_points_to_grid(cartesian_pos_data, self.params['grid_config'])
             current_frame.grid_map = grid_map
@@ -116,6 +130,8 @@ class RadarTracker:
             current_frame.dbscanClusters = dbscan_clusters
             unique_ids = np.unique(dbscan_clusters)
             unique_ids = unique_ids[unique_ids > 0]
+            if config.COMPONENT_DEBUG_FLAGS.get('tracker_core'):
+                logging.debug(f"[TRACKER_CORE] DBSCAN found {len(unique_ids)} unique clusters.")
 
             if unique_ids.size > 0:
                 temp_centroids, temp_cluster_info = [], []
@@ -167,10 +183,14 @@ class RadarTracker:
         current_frame.detectedClusterInfo = np.array(detected_cluster_info, dtype=object) if detected_cluster_info else np.array([])
         
         # --- Perform Tracking ---
+        if config.COMPONENT_DEBUG_FLAGS.get('tracker_core'):
+            logging.debug(f"[TRACKER_CORE] Performing track assignment. Detected centroids: {len(detected_centroids)}, Existing tracks: {len(self.all_tracks)}")
         self.all_tracks, self.next_track_id, _, _ = perform_track_assignment_master(
             self.frame_idx, detected_centroids, detected_cluster_info,
             self.all_tracks, self.next_track_id, delta_t, imu_omega, self.params
         )
+        if config.COMPONENT_DEBUG_FLAGS.get('tracker_core'):
+            logging.debug(f"[TRACKER_CORE] Track assignment complete. Total tracks: {len(self.all_tracks)}")
 
         self.frame_idx += 1
         return self.all_tracks, current_frame

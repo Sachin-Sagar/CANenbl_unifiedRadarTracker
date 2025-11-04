@@ -2,6 +2,8 @@
 
 import numpy as np
 import numbers # <-- Import the numbers module
+import logging
+import config
 
 # Import the modules we have already ported
 from .estimate_ego_motion_ransac import estimate_ego_motion_ransac
@@ -36,6 +38,9 @@ def estimate_ego_motion(
     imu_omega_radps = get_numeric(imu_omega_radps, 0.0)
     # --- MODIFICATION END ---
 
+    if config.COMPONENT_DEBUG_FLAGS.get('ransac'):
+        logging.debug(f"[RANSAC_EST] Input can_veh_speed_kmph: {can_veh_speed_kmph:.2f}")
+
     # --- 0. Initialize Outputs ---
     ransac_vx, ransac_vy, ego_inlier_ratio = 0.0, 0.0, 0.0
     ransac_successful = False
@@ -46,25 +51,39 @@ def estimate_ego_motion(
     # This line will now work correctly because can_veh_speed_kmph is guaranteed to be a number (or np.nan)
     is_vehicle_moving = not np.isnan(can_veh_speed_kmph) and \
                         (can_veh_speed_kmph / 3.6) > ego_motion_params['stationarySpeedThreshold']
+
+    if config.COMPONENT_DEBUG_FLAGS.get('ransac'):
+        logging.debug(f"[RANSAC_EST] is_vehicle_moving: {is_vehicle_moving}")
+        logging.debug(f"[RANSAC_EST] spatial_points shape: {spatial_points.shape}")
     
     if is_vehicle_moving and spatial_points.shape[0] >= 4:
+        if config.COMPONENT_DEBUG_FLAGS.get('ransac'):
+            logging.debug(f"[RANSAC_EST] Calling RANSAC with {spatial_points.shape[0]} points, inlier_thresh: {ego_motion_params['ransacInlierThreshold']}")
         ransac_vx, ransac_vy, ego_inlier_ratio, outlier_indices = estimate_ego_motion_ransac(
             spatial_points, raw_radial_speeds,
             ego_motion_params['ransacInlierThreshold'],
             ego_motion_params['ransacMinInlierRatio'],
             ego_motion_params['ransacMaxIterations']
         )
+        if config.COMPONENT_DEBUG_FLAGS.get('ransac'):
+            logging.debug(f"[RANSAC_EST] RANSAC output: vx={ransac_vx:.2f}, vy={ransac_vy:.2f}, inlier_ratio={ego_inlier_ratio:.2f}, outliers={outlier_indices.size}")
         if ego_inlier_ratio >= ego_motion_params['ransacMinInlierRatio']:
             ransac_successful = True
+            if config.COMPONENT_DEBUG_FLAGS.get('ransac'):
+                logging.debug(f"[RANSAC_EST] RANSAC successful.")
     else:
         if spatial_points.shape[0] > 0:
             outlier_indices = np.arange(spatial_points.shape[0])
+        if config.COMPONENT_DEBUG_FLAGS.get('ransac'):
+            logging.debug(f"[RANSAC_EST] RANSAC skipped (not moving or too few points). Outliers: {outlier_indices.size}")
 
     # --- 2. IIR Filter RANSAC Outputs ---
     iir_alpha = ego_motion_params['iir_alpha']
     if ransac_successful:
         filtered_vx_ego_iir = iir_alpha * ransac_vx + (1 - iir_alpha) * filtered_vx_ego_iir
         filtered_vy_ego_iir = iir_alpha * ransac_vy + (1 - iir_alpha) * filtered_vy_ego_iir
+    if config.COMPONENT_DEBUG_FLAGS.get('ransac'):
+        logging.debug(f"[RANSAC_EST] IIR Filtered RANSAC: vx={filtered_vx_ego_iir:.2f}, vy={filtered_vy_ego_iir:.2f}")
     
     # --- 3. Vehicle Dynamics Model ---
     has_torque_data = not np.isnan(shaft_torque_nm)
@@ -113,12 +132,19 @@ def estimate_ego_motion(
             z[1] = filtered_vx_ego_iir
         else:
             R_current[1, 1] *= increased_noise
-            
+    
+    if config.COMPONENT_DEBUG_FLAGS.get('ransac'):
+        logging.debug(f"[RANSAC_EST] EKF Measurement (z): {z.flatten()}")
+        logging.debug(f"[RANSAC_EST] EKF Measurement Noise (R_diag): {np.diag(R_current)}")
+
     # --- 6. EKF Correction Step ---
     x_corr, P_corr = ego_ekf_correct(x_pred, P_pred, z, R_current, grade_rad, roll_rad)
     
     # --- 7. Package updated state and results ---
     updated_kf_state = {'x': x_corr, 'P': P_corr, 'Q': ego_kf_state['Q']}
     
+    if config.COMPONENT_DEBUG_FLAGS.get('ransac'):
+        logging.debug(f"[RANSAC_EST] EKF Corrected State (x_corr): {x_corr.flatten()}")
+
     return (updated_kf_state, filtered_vx_ego_iir, filtered_vy_ego_iir, 
             ransac_vx, ransac_vy, ego_inlier_ratio, ax_dynamics, outlier_indices)

@@ -4,6 +4,7 @@ import json
 import numpy as np
 import logging
 import scipy.io as sio
+import config
 from .export_to_json import create_visualization_data
 
 class NumpyEncoder(json.JSONEncoder):
@@ -98,6 +99,16 @@ def update_and_save_history(all_tracks, fhist, json_filename="track_history.json
     """
     if params is None:
         params = {}
+
+    if config.DEBUG_FLAGS.get('log_final_history') and fhist:
+        logging.debug("--- Final History Pre-Save Inspection ---")
+        num_frames = len(fhist)
+        sample_indices = sorted(list(set([0, 1, 2, num_frames//2, num_frames-3, num_frames-2, num_frames-1])))
+        for i in sample_indices:
+            if 0 <= i < num_frames:
+                frame = fhist[i]
+                ego_vx = getattr(frame, 'egoVx', 'N/A')
+                logging.debug(f"[HISTORY] Frame {i}: egoVx = {ego_vx}")
 
     # --- 1. Save to JSON ---
     try:

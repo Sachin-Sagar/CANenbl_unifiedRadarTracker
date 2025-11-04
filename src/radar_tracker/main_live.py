@@ -184,6 +184,10 @@ class RadarWorker(QObject):
         can_buffers = dict(self.shared_live_can_data)
         radar_posix_timestamp = radar_timestamp_ms / 1000.0
 
+        if root_config.DEBUG_FLAGS.get('log_can_interpolation'):
+            # Use .get() for safety, though it should always be present
+            logging.debug(f"[INTERPOLATION] Shared CAN buffers: {can_buffers}")
+
         for signal_name, buffer in can_buffers.items():
             if not buffer:
                 continue
@@ -198,6 +202,9 @@ class RadarWorker(QObject):
                 interp_value = interp_with_extrap(radar_posix_timestamp, timestamps, values)
             
             can_data_for_frame[signal_name] = interp_value
+
+        if root_config.DEBUG_FLAGS.get('log_can_interpolation'):
+            logging.debug(f"[INTERPOLATION] Interpolated CAN data for frame: {can_data_for_frame}")
         
         return can_data_for_frame
 

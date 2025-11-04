@@ -1,6 +1,8 @@
 # src/data_adapter.py
 
 import numpy as np
+import logging
+import config
 from .hardware.read_and_parse_frame import FrameData
 
 class FHistFrame:
@@ -45,6 +47,9 @@ def adapt_frame_data_to_fhist(frame_data, current_timestamp_ms, can_signals=None
     fhist_frame.isOutlier = np.zeros(frame_data.num_points, dtype=bool)
 
     # --- NEW: Populate fhist_frame with live CAN data ---
+    if config.DEBUG_FLAGS.get('log_can_data_adapter'):
+        logging.debug(f"[ADAPTER] Received CAN signals: {can_signals}")
+
     if can_signals:
         # Convert vehicle speed from km/h to m/s for the tracker
         speed_kmh = can_signals.get('CAN_VS_KMH', 0.0)
@@ -53,6 +58,9 @@ def adapt_frame_data_to_fhist(frame_data, current_timestamp_ms, can_signals=None
         fhist_frame.egoVx = speed_mps
         fhist_frame.correctedEgoSpeed_mps = speed_mps
         
+        if config.DEBUG_FLAGS.get('log_can_data_adapter'):
+            logging.debug(f"[ADAPTER] Populated fhist_frame.egoVx with {speed_mps:.2f} m/s")
+
         # NOTE: Add other signals like yaw rate ('CAN_YAW_RATE') if the tracker uses them.
         # For now, we are only using vehicle speed.
 
