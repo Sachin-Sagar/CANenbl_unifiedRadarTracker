@@ -39,10 +39,20 @@ if __name__ == '__main__':
     # Configure logging for the entire application
     setup_logging(output_dir)
 
-    # --- Ask for CAN interface ---
-    can_interface = 'peak' # Default for non-live mode
-    if any('live' in arg.lower() for arg in sys.argv) or (len(sys.argv) == 1): # Check if running live or no args
-        print("--- CAN Interface Selection ---")
+    # --- Ask for mode ---
+    print("--- Welcome to the Unified Radar Tracker ---")
+    while True:
+        mode = input("Select mode: (1) Live Tracking or (2) Playback from File\nEnter choice (1 or 2): ")
+        if mode in ['1', '2']:
+            break
+        else:
+            print("Invalid choice. Please enter 1 or 2.")
+
+    can_interface = None # Initialize can_interface
+
+    if mode == '1':
+        # --- Ask for CAN interface ---
+        print("\n--- CAN Interface Selection ---")
         while True:
             can_interface_choice = input("Select CAN interface: (1) PEAK (pcan) or (2) Kvaser\nEnter choice (1 or 2): ").lower().strip()
             if can_interface_choice in ['1', 'peak', 'pcan']:
@@ -53,15 +63,6 @@ if __name__ == '__main__':
                 break
             else:
                 print("Invalid choice. Please enter 1 or 2.")
-
-    # --- Ask for mode ---
-    print("\n--- Mode Selection ---")
-    while True:
-        mode = input("Select mode: (1) Live Tracking or (2) Playback from File\nEnter choice (1 or 2): ")
-        if mode in ['1', '2']:
-            break
-        else:
-            print("Invalid choice. Please enter 1 or 2.")
 
     # If on Raspberry Pi, wait for switch to be turned on
     if platform.system() == "Linux":

@@ -133,3 +133,17 @@ Previously, the application automatically selected the CAN interface based on th
 
 3.  **Improved Error Handling:**
     *   The fatal error message block in `src/can_logger_app/main.py` was enhanced. It now provides specific, actionable troubleshooting advice based on the combination of the selected hardware (`peak` or `kvaser`) and the operating system, making it easier for users to diagnose connection issues (e.g., missing drivers, incorrect permissions, or network interface status).
+
+### Part 8: Bugfix - Unnecessary Hardware Check in Playback Mode
+
+#### The Problem
+The application would crash on startup if no radar hardware was connected, showing a "No serial ports found" error. This occurred even if the user intended to select the hardware-independent Playback Mode, preventing any use of the application without a radar attached.
+
+#### The Cause
+The root cause was that the radar serial port detection logic was located in the global scope of `src/radar_tracker/main_live.py`. When `main.py` imported this module at startup, the hardware check was executed immediately, before the user had a chance to select a mode. If no ports were found, it would call `sys.exit(1)`.
+
+#### The Solution
+The hardware check was refactored and moved out of the global scope.
+1.  A new function, `select_com_port()`, was created in `src/radar_tracker/main_live.py` to contain all the serial port detection and selection logic.
+2.  The `main()` function within `main_live.py` (which is only called when Live Mode is active) was updated to call `select_com_port()` at the beginning of its execution.
+3.  This change ensures that the hardware is only checked for when Live Mode is explicitly chosen, allowing Playback Mode to run without any connected hardware as intended.

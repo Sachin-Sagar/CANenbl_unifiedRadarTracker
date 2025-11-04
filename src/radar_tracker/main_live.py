@@ -31,36 +31,47 @@ from .tracking.utils.coordinate_transforms import interp_with_extrap
 import serial.tools.list_ports
 
 # --- Configuration ---
-if sys.platform == "win32":
-    CLI_COMPORT_NUM = 'COM11'
-elif sys.platform == "linux":
-    ports = serial.tools.list_ports.comports()
-    if not ports:
-        logging.error("No serial ports found. Please ensure the radar is connected and you have the necessary permissions (e.g., member of 'dialout' group).")
-        sys.exit(1)
-    elif len(ports) == 1:
-        CLI_COMPORT_NUM = ports[0].device
-        logging.info(f"Automatically selected serial port: {CLI_COMPORT_NUM}")
-    else:
-        print("Available serial ports:")
-        for i, port in enumerate(ports):
-            print(f"  {i}: {port.device}")
-        while True:
-            try:
-                choice = int(input("Please select the serial port for the radar: "))
-                if 0 <= choice < len(ports):
-                    CLI_COMPORT_NUM = ports[choice].device
-                    break
-                else:
-                    print("Invalid choice.")
-            except ValueError:
-                print("Invalid input.")
-else:
-    logging.error(f"Unsupported OS '{sys.platform}' detected. Please set COM port manually.")
-    CLI_COMPORT_NUM = None
-
 CONFIG_FILE_PATH = 'configs/profile_80_m_40mpsec_bsdevm_16tracks_dyClutter.cfg'
 INITIAL_BAUD_RATE = 115200
+
+def select_com_port():
+    """
+    Prompts the user to select a serial port for the radar.
+    This function is called only when live mode is active.
+    """
+    if sys.platform == "win32":
+        # You may need to adjust this default for your setup
+        default_port = 'COM11'
+        ports = serial.tools.list_ports.comports()
+        if not any(p.device == default_port for p in ports):
+            logging.warning(f"Default port {default_port} not found.")
+        return default_port
+        
+    elif sys.platform == "linux":
+        ports = serial.tools.list_ports.comports()
+        if not ports:
+            logging.error("No serial ports found. Please ensure the radar is connected and you have the necessary permissions (e.g., member of 'dialout' group).")
+            return None
+        elif len(ports) == 1:
+            selected_port = ports[0].device
+            logging.info(f"Automatically selected serial port: {selected_port}")
+            return selected_port
+        else:
+            print("Available serial ports:")
+            for i, port in enumerate(ports):
+                print(f"  {i}: {port.device}")
+            while True:
+                try:
+                    choice = int(input("Please select the serial port for the radar: "))
+                    if 0 <= choice < len(ports):
+                        return ports[choice].device
+                    else:
+                        print("Invalid choice.")
+                except ValueError:
+                    print("Invalid input.")
+    else:
+        logging.error(f"Unsupported OS '{sys.platform}' detected. Please set COM port manually.")
+        return None
 
 class RadarWorker(QObject):
     """
@@ -258,12 +269,19 @@ class RadarWorker(QObject):
 # MODIFIED: main() now accepts the shared dict
 def main(output_dir, shutdown_flag=None, shared_live_can_data=None):
     """Main application entry point."""
+    cli_com_port = select_com_port()
+    if cli_com_port is None:
+        logging.error("Could not determine COM port. Exiting live mode.")
+        # We need to ensure the QApplication doesn't start, but also that the main script can exit gracefully.
+        # A simple return should suffice, as the main script will then terminate.
+        return
+
     app = QApplication(sys.argv)
     worker_thread = QThread()
     
     # MODIFIED: Pass the shared dict to the worker
     radar_worker = RadarWorker(
-        CLI_COMPORT_NUM, 
+        cli_com_port, 
         CONFIG_FILE_PATH, 
         output_dir, 
         shutdown_flag,

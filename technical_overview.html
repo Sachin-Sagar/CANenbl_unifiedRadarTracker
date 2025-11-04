@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Technical Overview: Unified Radar Tracker</title>
+    <style>
+        :root {
+            --bg-color: #1a1b26;
+            --fg-color: #c0caf5;
+            --card-bg: #24283b;
+            --header-bg: #7aa2f7;
+            --header-fg: #1a1b26;
+            --accent-blue: #7aa2f7;
+            --accent-green: #9ece6a;
+            --accent-orange: #ff9e64;
+            --accent-red: #f7768e;
+            --border-color: #414868;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            background-color: var(--bg-color);
+            color: var(--fg-color);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background-color: var(--card-bg);
+            border-bottom: 4px solid var(--header-bg);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            text-align: center;
+            border-radius: 8px;
+        }
+        header h1 {
+            margin: 0;
+            color: var(--header-bg);
+            font-size: 2.5rem;
+        }
+        header p {
+            margin: 5px 0 0;
+            font-size: 1.2rem;
+            color: var(--accent-blue);
+        }
+        h2 {
+            color: var(--accent-green);
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-top: 2rem;
+        }
+        h3 {
+            color: var(--accent-orange);
+            margin-top: 1.5rem;
+        }
+        section {
+            background-color: var(--card-bg);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+        code {
+            background-color: var(--bg-color);
+            color: var(--accent-red);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Fira Code", monospace;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 0.5rem;
+        }
+        strong {
+            color: var(--accent-orange);
+        }
+        .diagram-container {
+            text-align: center;
+            padding: 20px;
+            background-color: #1e2233;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Technical Overview</h1>
+            <p>CAN-Enabled Unified Radar Tracker</p>
+        </header>
+
+        <section id="overview">
+            <h2>Project Overview</h2>
+            <p>
+                The primary goal of this project is to create a robust real-time vehicle tracking system by fusing data from two distinct sources: a <strong>radar sensor</strong> and a vehicle's <strong>CAN bus</strong>.
+            </p>
+            <p>
+                It merges a high-performance, multiprocessing-based CAN logging application with a PyQt5-based radar tracking and visualization application. The system is designed for high reliability, performance, and cross-platform compatibility, particularly addressing challenges encountered on Windows.
+            </p>
+        </section>
+
+        <section id="architecture">
+            <h2>System Architecture</h2>
+            <p>The architecture is built on a multi-process model to ensure stability, prevent hardware resource contention, and maximize performance. The two main processes are isolated from each other, communicating only through a managed shared dictionary.</p>
+            <div class="diagram-container">
+                <svg width="960" height="500" viewBox="0 0 960 500" font-family="sans-serif" font-size="14px" fill="#c0caf5">
+                    <defs>
+                        <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                            <path d="M 0 0 L 10 5 L 0 10 z" fill="#7aa2f7" />
+                        </marker>
+                    </defs>
+                    
+                    <!-- Main Process -->
+                    <rect x="10" y="10" width="460" height="480" rx="8" fill="#24283b" stroke="#7aa2f7" stroke-width="2"/>
+                    <text x="240" y="40" text-anchor="middle" font-size="18px" font-weight="bold" fill="#7aa2f7">Main Process (Radar & GUI)</text>
+
+                    <rect x="40" y="70" width="400" height="100" rx="5" fill="#414868"/>
+                    <text x="240" y="95" text-anchor="middle" font-weight="bold">PyQt GUI (Main Thread)</text>
+                    <text x="240" y="125" text-anchor="middle">Handles live visualization</text>
+                    <text x="240" y="145" text-anchor="middle">and user interaction.</text>
+
+                    <rect x="40" y="200" width="400" height="120" rx="5" fill="#414868"/>
+                    <text x="240" y="225" text-anchor="middle" font-weight="bold">RadarWorker (QThread)</text>
+                    <text x="240" y="255" text-anchor="middle">Reads from Radar Hardware.</text>
+                    <text x="240" y="275" text-anchor="middle">Reads from Shared CAN Dictionary.</text>
+                    <text x="240" y="295" text-anchor="middle">Fuses data & runs tracking algorithm.</text>
+
+                    <!-- CAN Logger Process -->
+                    <rect x="490" y="10" width="460" height="480" rx="8" fill="#24283b" stroke="#9ece6a" stroke-width="2"/>
+                    <text x="720" y="40" text-anchor="middle" font-size="18px" font-weight="bold" fill="#9ece6a">CAN Logger Process</text>
+
+                    <rect x="520" y="70" width="400" height="100" rx="5" fill="#414868"/>
+                    <text x="720" y="95" text-anchor="middle" font-weight="bold">CANReader (Thread)</text>
+                    <text x="720" y="125" text-anchor="middle">Exclusive hardware access.</text>
+                    <text x="720" y="145" text-anchor="middle">Creates, uses, and destroys `can.Bus`.</text>
+
+                    <rect x="520" y="200" width="400" height="100" rx="5" fill="#414868"/>
+                    <text x="720" y="225" text-anchor="middle" font-weight="bold">Decoder (Process Pool)</text>
+                    <text x="720" y="255" text-anchor="middle">Decodes raw messages using DBC.</text>
+                    <text x="720" y="275" text-anchor="middle">Writes to Log & Shared Dictionary.</text>
+
+                    <rect x="520" y="330" width="400" height="100" rx="5" fill="#414868"/>
+                    <text x="720" y="355" text-anchor="middle" font-weight="bold">LogWriter (Thread)</text>
+                    <text x="720" y="385" text-anchor="middle">Writes decoded signals to</text>
+                    <text x="720" y="405" text-anchor="middle">`can_log.json`.</text>
+
+                    <!-- Shared Dictionary -->
+                    <rect x="350" y="350" width="260" height="60" rx="5" fill="#1a1b26" stroke="#ff9e64" stroke-width="2"/>
+                    <text x="480" y="380" text-anchor="middle" font-weight="bold" fill="#ff9e64">Shared CAN Dictionary</text>
+                    <text x="480" y="400" text-anchor="middle" font-size="12px">(multiprocessing.Manager.dict)</text>
+
+                    <!-- Arrows -->
+                    <path d="M 240 320 Q 240 365 345 375" stroke="#7aa2f7" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                    <text x="280" y="350" fill="#7aa2f7">Read</text>
+
+                    <path d="M 620 300 Q 550 320 510 345" stroke="#9ece6a" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                    <text x="570" y="315" fill="#9ece6a">Write</text>
+                    
+                    <path d="M 720 170 L 720 200" stroke="#9ece6a" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                    <path d="M 720 300 L 720 330" stroke="#9ece6a" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                    <path d="M 720 430 L 720 460 Q 850 460 850 480 L 900 480" stroke="#9ece6a" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                    <text x="905" y="485" fill="#9ece6a">can_log.json</text>
+                </svg>
+            </div>
+        </section>
+
+        <section id="solutions">
+            <h2>Key Technical Solutions</h2>
+            
+            <h3>1. Dedicated CAN Process for Hardware Stability</h3>
+            <ul>
+                <li><strong>Problem:</strong> Initial designs had both the radar process and a logging process attempting to control the CAN hardware simultaneously. PCAN drivers only permit one process to connect, leading to a race condition where one would fail, often preventing CAN logging.</li>
+                <li><strong>Solution:</strong> The architecture was redesigned to give a single, dedicated <strong>CAN Logger Process</strong> exclusive control over the hardware. This process is now the sole owner of the CAN interface, eliminating resource contention entirely.</li>
+            </ul>
+
+            <h3>2. Solving the `QObject` Timer Error on Windows</h3>
+            <ul>
+                <li><strong>Problem:</strong> After isolating the CAN hardware, the application still crashed on exit with <code>QObject::~QObject: Timers cannot be stopped from another thread</code>.</li>
+                <li><strong>Diagnosis:</strong> The <code>pcan</code> backend for <code>python-can</code> uses Qt internally. Qt requires that a <code>QObject</code> (like the underlying bus object) be created, used, and destroyed all within the <strong>same thread</strong>. Our code was violating this by creating the bus in the process's main thread but using it in a separate <code>CANReader</code> thread.</li>
+                <li><strong>Solution:</strong> The <code>can.interface.Bus</code> object's entire lifecycle was moved into the <code>CANReader</code> thread. The main thread of the CAN process now only passes connection parameters (<code>bus_params</code>) and waits for a success signal, ensuring Qt's thread ownership rules are strictly followed.</li>
+            </ul>
+
+            <h3>3. High-Performance, Zero-Copy Data Sharing</h3>
+            <ul>
+                <li><strong>CAN Logging:</strong> A high-throughput pipeline is used for logging. A <code>multiprocessing.Queue</code> passes raw CAN messages to a pool of worker processes for decoding. The decoded data is written into a large, shared memory array (<code>multiprocessing.RawArray</code>), and its index is passed to a dedicated <code>LogWriter</code> thread, minimizing data copying.</li>
+                <li><strong>Live Data Fusion:</strong> The decoder processes also write the latest value of each signal into a <code>multiprocessing.Manager.dict()</code>. This special dictionary acts as a shared key-value store, allowing the main radar process to read the latest CAN data with minimal overhead, facilitating real-time sensor fusion.</li>
+            </ul>
+
+            <h3>4. Flexible, User-Driven CAN Configuration</h3>
+            <ul>
+                <li><strong>Feature:</strong> To support multiple types of CAN hardware, the static, OS-based configuration was replaced with an interactive prompt at startup.</li>
+                <li><strong>Implementation:</strong> The user can select between <code>PEAK</code> and <code>Kvaser</code>. The application then dynamically determines the correct <code>python-can</code> backend (<code>pcan</code>, <code>socketcan</code>, or <code>kvaser</code>) and channel configuration for the chosen hardware and host OS, improving flexibility and usability.</li>
+            </ul>
+        </section>
+
+        <section id="data-flow">
+            <h2>High-Level Data Flow (Live Mode)</h2>
+            <ol>
+                <li>A <strong>CAN message</strong> is received from the hardware by the <code>CANReader</code> thread.</li>
+                <li>The raw message is passed to the <strong>Decoder Process Pool</strong>.</li>
+                <li>The decoders parse the message using the DBC file. The resulting signals are:
+                    <br>a) Written to the <strong>LogWriter</strong> thread to be saved in <code>can_log.json</code>.
+                    <br>b) Written to the <strong>Shared CAN Dictionary</strong>.
+                </li>
+                <li>Concurrently, a <strong>radar frame</strong> is received by the <code>RadarWorker</code> thread.</li>
+                <li>The <code>RadarWorker</code> reads the latest vehicle speed and other relevant signals from the <strong>Shared CAN Dictionary</strong>.</li>
+                <li>It interpolates the CAN data to precisely match the radar frame's timestamp.</li>
+                <li>This fused data (radar points + vehicle motion) is passed to the tracking algorithm.</li>
+                <li>The final track data is used for visualization and saved to <code>track_history.json</code>.</li>
+            </ol>
+        </section>
+
+    </div>
+</body>
+</html>

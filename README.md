@@ -57,11 +57,14 @@ This architecture solves the Windows-specific hardware and threading conflicts b
 
 ### Prerequisites
 
-* Python 3.10 or newer.
-* **Radar Hardware:** A compatible radar sensor.
-* **CAN Hardware:** A PCAN-USB adapter is recommended.
-* **Drivers (Windows):** Install the [PCAN-Basic drivers](https://www.peak-system.com/PCAN-Basic.239.0.html?&L=1).
-* **Drivers (Linux):** Install `can-utils`:
+*   Python 3.10 or newer.
+
+**Note:** The following hardware and drivers are only required for **Live Mode**.
+
+*   **Radar Hardware:** A compatible radar sensor.
+*   **CAN Hardware:** A PCAN-USB or Kvaser adapter is recommended.
+*   **Drivers (Windows):** Install the appropriate drivers for your CAN hardware (e.g., [PCAN-Basic](https://www.peak-system.com/PCAN-Basic.239.0.html?&L=1) or Kvaser drivers).
+*   **Drivers (Linux):** For PEAK hardware, install `can-utils`:
     ```bash
     sudo apt update
     sudo apt install can-utils
@@ -148,8 +151,9 @@ Upon shutdown, the CAN logger will print a **Data Logging Summary** to the conso
     python main.py
     ```
 
-3.  **Select CAN Interface (Live Mode):** The script will first prompt you to choose your CAN hardware.
-4.  **Select Mode:** Next, you will be prompted to choose between `(1) Live Tracking` or `(2) Playback from File`.
+3.  **Select Mode:** The script will first prompt you to choose between `(1) Live Tracking` or `(2) Playback from File`.
+
+4.  **Select CAN Interface (Live Mode Only):** If you selected Live Tracking, you will then be prompted to choose your CAN hardware.
 
 *   **On Raspberry Pi (Live Mode):** After the initial prompts, the application will wait for the physical switch (connected to GPIO 17) to be turned **ON** to start the radar tracking and CAN logging. To stop the application, turn the switch **OFF**.
 *   **On Windows/other systems (Live Mode):** The application will start immediately after mode selection. To stop the application, close the visualization window or press `Ctrl+C` in the console.
