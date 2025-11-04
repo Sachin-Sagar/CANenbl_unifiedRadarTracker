@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2025-11-04
+
+### Fixed
+
+- **Kvaser CAN Interface on Windows:** Resolved `PermissionError: [WinError 5] Access is denied` and `QObject::~QObject: Timers cannot be stopped from another thread` errors when using the Kvaser CAN interface on Windows. This was caused by `multiprocessing` resource conflicts due to premature loading of CAN/Qt-related modules in the main process. The fix involved deferring the import of `can_logger_app.main`, `radar_tracker.main_live`, and `radar_tracker.main_playback` into the `if __name__ == '__main__':` block in `main.py`.
+
+### Changed
+
+- **Documentation Updates:**
+    - Updated `GEMINI.md` with a detailed entry (`Part 10`) explaining the diagnosis and solution for the Kvaser Windows `PermissionError`.
+    - Updated `README.md` to clarify Kvaser hardware support on Windows, explicitly stating it is now fully supported, and refined hardware recommendations.
+
 ## [1.2.0] - 2025-10-31
 
 ### Added

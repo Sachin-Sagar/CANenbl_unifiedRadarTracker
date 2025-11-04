@@ -172,3 +172,21 @@ The most reliable solution is to **use PCAN hardware with the standard SocketCAN
 3.  **Kernel Drivers:** The necessary `peak_usb` kernel module is included in most modern Linux distributions, including Debian/Raspbian, making setup much simpler than with Kvaser's proprietary drivers.
 
 This approach bypasses the problematic proprietary driver layer entirely, providing a stable and well-supported connection to the CAN bus. The application's dynamic interface selection was designed specifically to handle this scenario.
+
+### Part 10: Kvaser PermissionError on Windows
+
+#### The Problem
+When selecting the `Kvaser` interface on Windows, the application would crash immediately after starting the CAN logger process. The console would show a `PermissionError: [WinError 5] Access is denied` originating deep within the `multiprocessing.spawn` module, often accompanied by a `QObject::~QObject: Timers cannot be stopped from another thread` warning.
+
+#### The Cause
+This issue was a classic problem related to how `multiprocessing` works on Windows.
+1.  Windows uses the `spawn` method to create new processes, which starts a clean Python interpreter. The parent process must "pickle" and send all necessary data and resources to the child.
+2.  The main entrypoint script (`main.py`) was importing `can_logger_app.main` at the global scope (at the top of the file).
+3.  Because the Kvaser backend for `python-can` has dependencies that use Qt, this top-level import caused Qt objects and potentially low-level hardware handles to be loaded into the main parent process *before* the child process was spawned.
+4.  These resources are not "picklable" and cannot be transferred to the child process. When `multiprocessing` attempted to duplicate the handles for the new process, it resulted in a `PermissionError` because the parent's handles were not meant to be inherited.
+
+#### The Solution
+The fix was to prevent any CAN-related modules from being loaded in the parent process.
+1.  The import statements for `can_logger_main`, `main_live`, and `run_playback` were moved from the global scope at the top of `main.py`.
+2.  They were placed inside the `if __name__ == '__main__':` block.
+3.  This ensures that these modules (and their dependencies, like `python-can` and its backends) are only imported *after* the main script has started, and crucially, they are not loaded in the global scope that gets processed when a child process is spawned. As a result, the `can_logger_process` starts clean, imports the CAN library within its own memory space, and can create and manage its own hardware handles without conflict, resolving the error.

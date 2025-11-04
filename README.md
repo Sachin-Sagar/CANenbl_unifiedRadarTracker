@@ -65,16 +65,15 @@ For the best experience in **Live Mode**, please follow these hardware recommend
     *   **Reasoning:** The `socketcan` interface is natively supported by the Linux kernel, making it extremely stable and reliable. The necessary drivers are typically pre-installed. When the application prompts for an interface, choose **PEAK (pcan)**, and it will automatically use the `socketcan` backend.
 
 *   **On Windows:**
-    *   **Hardware:** **PCAN-USB Adapter**.
-    *   **Interface:** **PCAN-Basic**.
-    *   **Reasoning:** The PCAN-Basic driver provides a stable, well-supported interface for `python-can` on Windows.
+    *   **Hardware:** **PCAN-USB Adapter** or **Kvaser CAN Adapter**.
+    *   **Interface:** **PCAN-Basic** or **Kvaser CANlib**.
+    *   **Reasoning:** Both PCAN and Kvaser are fully supported on Windows. Ensure you have the correct drivers installed for your chosen device.
 
-### Kvaser Hardware (Use With Caution on Linux)
+### Kvaser Hardware Support
 
-While the application includes `Kvaser` as an interface option, it is **not recommended for use on Linux**.
+*   **Windows:** Kvaser hardware is fully supported on Windows. The application's architecture has been specifically designed to handle the driver interactions correctly.
 
-*   **The Issue:** There is a known, recurring incompatibility between `python-can` and Kvaser's proprietary Linux drivers (`canlib`). This can lead to runtime crashes (e.g., `NameError: name 'canGetNumberOfChannels' is not defined`), even if the drivers appear to be installed correctly.
-*   **Recommendation:** If you are on Linux, use a PCAN adapter to avoid these driver-related issues. If you must use Kvaser, be aware that it may not be stable.
+*   **Linux (Use With Caution):** Using Kvaser on Linux is **not recommended**. There is a known, recurring incompatibility between `python-can` and Kvaser's proprietary Linux drivers (`canlib`). This can lead to runtime crashes (e.g., `NameError: name 'canGetNumberOfChannels' is not defined`), even if the drivers appear to be installed correctly. For Linux, a PCAN adapter using the native `socketcan` interface is the most reliable option.
 
 For details on installing drivers, see the **Installation and Setup** section.
 

@@ -8,16 +8,12 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
 
-from radar_tracker.main import main as radar_main
 from radar_tracker.console_logger import logger
 from datetime import datetime
 if platform.system() == "Linux":
         from can_logger_app.gpio_handler import init_gpio, wait_for_switch_on, check_for_switch_off, cleanup_gpio, turn_on_led, turn_off_led
 import threading
 import multiprocessing
-from can_logger_app.main import main as can_logger_main
-from radar_tracker.main_live import main as main_live
-from radar_tracker.main_playback import run_playback
 
 
 import json
@@ -25,6 +21,10 @@ import logging
 from src.radar_tracker.json_log_handler import JSONLogHandler
 
 if __name__ == '__main__':
+    # --- Imports are deferred to here to prevent issues with multiprocessing on Windows ---
+    from can_logger_app.main import main as can_logger_main
+    from radar_tracker.main_live import main as main_live
+    from radar_tracker.main_playback import run_playback
     multiprocessing.freeze_support()
     
     # --- Create the Manager and shared data structures FIRST ---
