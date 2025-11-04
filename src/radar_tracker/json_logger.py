@@ -4,6 +4,7 @@ import json
 import numpy as np
 import queue
 from PyQt5.QtCore import QObject, pyqtSignal
+from .console_logger import logger
 
 # Import the FrameData class definition
 from .hardware.read_and_parse_frame import FrameData
@@ -61,7 +62,7 @@ class DataLogger(QObject):
         try:
             self.log_file = open(self.filename, 'w')
             self.log_file.write('[') # Start of the JSON array
-            print(f"--- Logging raw radar data to {self.filename} ---")
+            logger.info(f"--- Logging raw radar data to {self.filename} ---")
 
             while self.is_running or not self.data_queue.empty():
                 try:
@@ -80,12 +81,12 @@ class DataLogger(QObject):
                     continue # No data, just loop again
 
         except Exception as e:
-            print(f"ERROR in logger thread: {e}")
+            logger.error(f"ERROR in logger thread: {e}")
         finally:
             if self.log_file:
                 self.log_file.write(']') # End of the JSON array
                 self.log_file.close()
-                print(f"--- Raw data log file {self.filename} finalized. ---")
+                logger.info(f"--- Raw data log file {self.filename} finalized. ---")
             self.finished.emit()
 
     def add_data(self, frame_data):
@@ -94,5 +95,5 @@ class DataLogger(QObject):
 
     def stop(self):
         """Signals the logger to finish writing and stop."""
-        print("--- Stopping data logger... ---")
+        logger.info("--- Stopping data logger... ---")
         self.is_running = False

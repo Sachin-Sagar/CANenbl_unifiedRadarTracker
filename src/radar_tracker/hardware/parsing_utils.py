@@ -1,6 +1,7 @@
 import math
 import struct
 from dataclasses import dataclass, field, fields
+from ..console_logger import logger, log_debug
 
 # --- UNMISSABLE SCRIPT EXECUTION CHECK ---
 # REMOVED the print statements from this top level
@@ -51,7 +52,7 @@ def read_cfg(filename):
                 if line.strip() and not line.strip().startswith('%'):
                     config.append(line.strip())
     except FileNotFoundError:
-        print(f'ERROR: File {filename} not found!')
+        logger.error(f'ERROR: File {filename} not found!')
         return []
     return config
 
@@ -74,7 +75,7 @@ def parse_cfg(cli_cfg):
 
     # --- Step 2: Perform all derived calculations with EXTREME type safety ---
     try:
-        #print("[DEBUG] Starting derived parameter calculation...")
+        log_debug("[DEBUG] Starting derived parameter calculation...")
 
         # --- Calculation for numLoops ---
         num_tx_ant_int = int(params.dataPath.numTxAnt)
@@ -87,13 +88,13 @@ def parse_cfg(cli_cfg):
         else:
             num_loops_int = 0
         params.frameCfg.numLoops = num_loops_int
-        #print(f"[DEBUG]   - numLoops calculated as: {num_loops_int} (type: {type(num_loops_int)})")
+        log_debug(f"[DEBUG]   - numLoops calculated as: {num_loops_int} (type: {type(num_loops_int)})")
 
         # --- Calculation for numChirpsPerFrame ---
         chirp_end_idx = num_tx_ant_int - 1
         num_chirps_per_frame_int = int((chirp_end_idx - 0 + 1) * num_loops_int)
         params.dataPath.numChirpsPerFrame = num_chirps_per_frame_int
-        #print(f"[DEBUG]   - numChirpsPerFrame calculated as: {num_chirps_per_frame_int} (type: {type(num_chirps_per_frame_int)})")
+        log_debug(f"[DEBUG]   - numChirpsPerFrame calculated as: {num_chirps_per_frame_int} (type: {type(num_chirps_per_frame_int)})")
         
         # --- Calculation for numDopplerChirps ---
         if num_tx_ant_int > 0:
@@ -101,23 +102,23 @@ def parse_cfg(cli_cfg):
         else:
             num_doppler_chirps_int = 0
         params.dataPath.numDopplerChirps = num_doppler_chirps_int
-        #print(f"[DEBUG]   - numDopplerChirps calculated as: {num_doppler_chirps_int} (type: {type(num_doppler_chirps_int)})")
+        log_debug(f"[DEBUG]   - numDopplerChirps calculated as: {num_doppler_chirps_int} (type: {type(num_doppler_chirps_int)})")
         
         # --- THE FAILING OPERATION ---
-        #print("[DEBUG] About to perform the bit_length operation...")
+        log_debug("[DEBUG] About to perform the bit_length operation...")
         
         # Explicitly cast the operand to int again, just to be 100% certain.
         operand = int(params.dataPath.numDopplerChirps) - 1
         
-        #print(f"[DEBUG]   - Operand for bit_length: {operand} (type: {type(operand)})")
+        log_debug(f"[DEBUG]   - Operand for bit_length: {operand} (type: {type(operand)})")
         params.dataPath.numDopplerBins = 1 << operand.bit_length()
         
-        #print("\n[SUCCESS] Parameter parsing and calculation completed without error.")
+        log_debug("\n[SUCCESS] Parameter parsing and calculation completed without error.")
 
     except Exception as e:
-        print("\n[FATAL ERROR] An exception occurred during parameter calculation:")
-        print(f"  - Error Type: {type(e)}")
-        print(f"  - Error Message: {e}")
+        logger.error("\n[FATAL ERROR] An exception occurred during parameter calculation:")
+        logger.error(f"  - Error Type: {type(e)}")
+        logger.error(f"  - Error Message: {e}")
         # Re-raise the exception to show the original traceback
         raise
     return params
@@ -134,6 +135,6 @@ def read_to_struct(byte_array, struct_def):
         for i, field_name in enumerate(struct_def.keys()):
             result[field_name] = unpacked_data[i]
     except struct.error as e:
-        print(f"ERROR: Failed to unpack byte array. {e}")
+        logger.error(f"ERROR: Failed to unpack byte array. {e}")
         return None
     return result

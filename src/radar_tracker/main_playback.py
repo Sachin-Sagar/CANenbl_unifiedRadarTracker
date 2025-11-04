@@ -9,7 +9,7 @@ from .tracking.data_loader import load_fhist_data, load_and_sync_can_data
 from .tracking.tracker import RadarTracker
 from .tracking.parameters import define_parameters
 from .tracking.update_and_save_history import update_and_save_history
-from .console_logger import setup_logging
+from .console_logger import logger
 from .data_adapter import adapt_matlab_frame_to_fhist
 
 def interp_with_extrap(x, xp, fp):
@@ -108,5 +108,5 @@ def run_playback(output_dir):
     )
 
 if __name__ == '__main__':
-    setup_logging()
+
     run_playback()

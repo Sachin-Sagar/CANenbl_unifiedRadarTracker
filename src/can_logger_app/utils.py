@@ -3,7 +3,7 @@
 import os
 import cantools
 import bitstruct
-import config
+from . import config
 
 def load_signals_to_monitor(file_path):
     """

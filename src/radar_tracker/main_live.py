@@ -22,7 +22,7 @@ from .tracking.parameters import define_parameters
 from .tracking.update_and_save_history import update_and_save_history
 from .live_visualizer import LiveVisualizer
 from .json_logger import DataLogger
-from .console_logger import setup_logging
+from .console_logger import logger
 # --- REMOVED LiveCANManager ---
 import config as root_config
 from .tracking.utils.coordinate_transforms import interp_with_extrap
@@ -57,18 +57,18 @@ def select_com_port():
             logging.info(f"Automatically selected serial port: {selected_port}")
             return selected_port
         else:
-            print("Available serial ports:")
+            logger.info("Available serial ports:")
             for i, port in enumerate(ports):
-                print(f"  {i}: {port.device}")
+                logger.info(f"  {i}: {port.device}")
             while True:
                 try:
                     choice = int(input("Please select the serial port for the radar: "))
                     if 0 <= choice < len(ports):
                         return ports[choice].device
                     else:
-                        print("Invalid choice.")
+                        logger.info("Invalid choice.")
                 except ValueError:
-                    print("Invalid input.")
+                    logger.info("Invalid input.")
     else:
         logging.error(f"Unsupported OS '{sys.platform}' detected. Please set COM port manually.")
         return None
@@ -309,5 +309,4 @@ def main(output_dir, shutdown_flag=None, shared_live_can_data=None):
 
 if __name__ == '__main__':
     # This allows the script to be run standalone for testing.
-    setup_logging()
     main()

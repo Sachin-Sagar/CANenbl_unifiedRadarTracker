@@ -30,7 +30,7 @@ try:
 
     print("\nDEBUG: --- About to import custom modules ---")
     
-    import config
+    from . import config
     print("DEBUG: Imported 'config.py'")
     
     import utils

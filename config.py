@@ -33,8 +33,14 @@ else:
     CAN_CHANNEL = 0
 
 
+# --- NEW: Master Debug Switch ---
+# This is the master switch to enable or disable all console logging.
+# When set to False, it overrides all other debug flags.
+ENABLE_CONSOLE_LOGGING = True
+
 # --- NEW: Granular Debug Flags ---
 # Set individual flags to True to enable specific debug messages.
+# These are only active if ENABLE_CONSOLE_LOGGING is True.
 DEBUG_FLAGS = {
     # Logs the raw shared CAN data and the result of the interpolation
     # in src/radar_tracker/main_live.py

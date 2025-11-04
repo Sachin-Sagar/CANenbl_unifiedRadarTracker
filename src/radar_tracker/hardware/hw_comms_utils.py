@@ -1,5 +1,6 @@
 import serial
 import serial.tools.list_ports
+from ..console_logger import logger
 
 # Define the 8-byte sync pattern for frame synchronization
 SYNC_PATTERN = b'\x02\x01\x04\x03\x06\x05\x08\x07'
@@ -28,8 +29,8 @@ def configure_control_port(com_port_num, baud_rate):
         # List available ports and check if the desired port exists
         available_ports = [p.device for p in serial.tools.list_ports.comports()]
         if com_port_string not in available_ports:
-            print(f'\nERROR: CONTROL port {com_port_string} is NOT in the list of available ports.')
-            print(f'Available ports are: {available_ports}')
+            logger.error(f'\nERROR: CONTROL port {com_port_string} is NOT in the list of available ports.')
+            logger.info(f'Available ports are: {available_ports}')
             return None
 
         # Create and open the serial port object
@@ -40,10 +41,10 @@ def configure_control_port(com_port_num, baud_rate):
             stopbits=serial.STOPBITS_ONE,
             timeout=1.0 # Set a timeout for read operations
         )
-        print(f'--- Opened serial port {com_port_string} at {baud_rate} baud. ---')
+        logger.info(f'--- Opened serial port {com_port_string} at {baud_rate} baud. ---')
         return sphandle
     except serial.SerialException as e:
-        print(f'ERROR: Failed to open serial port {com_port_string}: {e}')
+        logger.error(f'ERROR: Failed to open serial port {com_port_string}: {e}')
         return None
 
 def reconfigure_port_for_data(sphandle):
@@ -53,7 +54,7 @@ def reconfigure_port_for_data(sphandle):
     if sphandle and sphandle.is_open:
         sphandle.reset_input_buffer()
         sphandle.reset_output_buffer()
-        print('--- Port configured for data mode (binary streaming). ---')
+        logger.info('--- Port configured for data mode (binary streaming). ---')
     return sphandle
 
 def read_frame_header(h_data_serial_port, frame_header_length_bytes):
@@ -66,10 +67,10 @@ def read_frame_header(h_data_serial_port, frame_header_length_bytes):
         try:
             byte = h_data_serial_port.read(1)
             if not byte:
-                print("Warning: Timeout occurred while reading from serial port.")
+                logger.warning("Timeout occurred while reading from serial port.")
                 return None, 0, out_of_sync_bytes
         except serial.SerialException as e:
-            print(f"ERROR: Serial port read failed: {e}")
+            logger.error(f"Serial port read failed: {e}")
             return None, 0, out_of_sync_bytes
 
         if byte == SYNC_PATTERN[0:1]:

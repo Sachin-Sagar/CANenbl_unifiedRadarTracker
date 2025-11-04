@@ -2,6 +2,7 @@
 
 from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QApplication
 import pyqtgraph as pg
+from .console_logger import logger
 
 class LiveVisualizer(QMainWindow):
     """
@@ -66,7 +67,7 @@ class LiveVisualizer(QMainWindow):
         This method is called when the user closes the window.
         It handles the graceful shutdown of the worker thread.
         """
-        print("--- Window closed. Initiating shutdown... ---")
+        logger.info("--- Window closed. Initiating shutdown... ---")
         
         # 1. Signal the worker to stop its loop
         self.worker.stop()
@@ -76,5 +77,5 @@ class LiveVisualizer(QMainWindow):
             self.worker_thread.quit()
             self.worker_thread.wait()
         
-        print("--- Shutdown complete. ---")
+        logger.info("--- Shutdown complete. ---")
         event.accept() # Allow the window to close

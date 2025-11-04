@@ -5,19 +5,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from matplotlib.patches import Ellipse
+from ..console_logger import logger
 
 def load_track_history(filename="track_history.json"):
     """Loads the track history from a JSON file."""
     try:
         with open(filename, 'r') as f:
             data = json.load(f)
-        print(f"Successfully loaded data from {filename}")
+        logger.info(f"Successfully loaded data from {filename}")
         return data
     except FileNotFoundError:
-        print(f"Error: {filename} not found. Please run the main tracking script first.")
+        logger.error(f"Error: {filename} not found. Please run the main tracking script first.")
         return None
     except Exception as e:
-        print(f"Error loading JSON file: {e}")
+        logger.error(f"Error loading JSON file: {e}")
         return None
 
 def plot_covariance_ellipse(ax, position, radii, angle_deg, color='r'):
@@ -47,21 +48,21 @@ def visualize_track_history():
 
     # --- 2. Get User Input for Track ID ---
     available_ids = [track['id'] for track in all_tracks]
-    print(f"Available track IDs are: {available_ids}")
+    logger.info(f"Available track IDs are: {available_ids}")
     
     try:
         track_id_to_plot = int(input("Enter the track ID you want to visualize: "))
         selected_track = next((t for t in all_tracks if t['id'] == track_id_to_plot), None)
         if selected_track is None:
-            print(f"Error: Track ID {track_id_to_plot} not found.")
+            logger.error(f"Error: Track ID {track_id_to_plot} not found.")
             return
     except ValueError:
-        print("Invalid input. Please enter a number.")
+        logger.error("Invalid input. Please enter a number.")
         return
 
     history_log = selected_track.get('historyLog', [])
     if not history_log:
-        print(f"Error: Track ID {track_id_to_plot} has no history log.")
+        logger.error(f"Error: Track ID {track_id_to_plot} has no history log.")
         return
 
     num_history_points = len(history_log)

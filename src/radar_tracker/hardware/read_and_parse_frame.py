@@ -4,6 +4,7 @@ import numpy as np
 # MODIFICATION: Changed local imports to be relative
 from . import hw_comms_utils
 from . import parsing_utils
+from ..console_logger import logger, log_debug
 
 # --- TLV Type Constants ---
 # As defined in read_and_parse_frame.m
@@ -93,12 +94,12 @@ def read_and_parse_frame(h_data_port, params):
     # --- Read Frame Header and Payload ---
     rx_header_bytes, byte_count, _ = hw_comms_utils.read_frame_header(h_data_port, frame_header_length)
     if not rx_header_bytes or byte_count != frame_header_length:
-        print("Warning: Incomplete header received.")
+        logger.warning("Incomplete header received.")
         return None
 
     frame_header = parsing_utils.read_to_struct(rx_header_bytes, FRAME_HEADER_STRUCT)
     if not frame_header:
-        print("Warning: Could not parse frame header.")
+        logger.warning("Could not parse frame header.")
         return None
         
     data_length = frame_header['packetLength'] - frame_header_length
@@ -107,7 +108,7 @@ def read_and_parse_frame(h_data_port, params):
     if data_length > 0:
         payload_bytes = h_data_port.read(data_length)
         if len(payload_bytes) != data_length:
-            print("Warning: Incomplete payload received.")
+            logger.warning("Incomplete payload received.")
             return None
     else:
         payload_bytes = b''
@@ -120,7 +121,7 @@ def read_and_parse_frame(h_data_port, params):
     # --- MODIFIED: Changed loop to get index 'i' for debug message ---
     for i in range(frame_header['numTLVs']):
         if offset + tlv_header_length > data_length:
-            print("Warning: Not enough data for TLV header.")
+            logger.warning("Not enough data for TLV header.")
             break
         
         # Read TLV header
@@ -131,14 +132,14 @@ def read_and_parse_frame(h_data_port, params):
         tlv_type = tlv_header['type']
 
         # --- NEW: Added debug message for TLV header ---
-        #print(f"[DEBUG] Found TLV #{i+1} of {frame_header['numTLVs']}: Type={tlv_type}, Length={value_length} bytes, at offset={offset}")
+        log_debug(f"[DEBUG] Found TLV #{i+1} of {frame_header['numTLVs']}: Type={tlv_type}, Length={value_length} bytes, at offset={offset}", 'log_can_interpolation')
 
         # --- CRITICAL FIX ---
         # The total length of the TLV is the value_length + the header length.
         # The parser must advance its offset by this total amount.
         total_tlv_length = value_length + tlv_header_length
         if offset + total_tlv_length > data_length:
-            print(f"Warning: TLV (type {tlv_type}) length error. Stated length exceeds buffer.")
+            logger.warning(f"TLV (type {tlv_type}) length error. Stated length exceeds buffer.")
             break
 
         value_offset = offset + tlv_header_length
@@ -170,7 +171,7 @@ def parse_point_cloud_tlv(frame_data, value_bytes, params):
     frame_data.num_points = num_input_points
 
     # --- NEW: Added debug message for point cloud data ---
-    #print(f"[DEBUG] Point Cloud TLV: Found {num_input_points} detected points.")
+    log_debug(f"[DEBUG] Point Cloud TLV: Found {num_input_points} detected points.", 'log_can_interpolation')
 
     if num_input_points > 0:
         points_offset = point_unit_len
@@ -219,7 +220,7 @@ def parse_stats_tlv(frame_data, value_bytes):
         value_bytes[offset : offset + temp_len], STATS_TEMP_STRUCT
     )
     # --- NEW: Added debug message for stats data ---
-    #print(f"[DEBUG] Stats TLV: Parsed timing, power, and temperature info.")
+    log_debug(f"[DEBUG] Stats TLV: Parsed timing, power, and temperature info.", 'log_can_interpolation')
 
 
 def parse_target_list_tlv(frame_data, value_bytes):
@@ -229,7 +230,7 @@ def parse_target_list_tlv(frame_data, value_bytes):
     frame_data.num_targets = num_targets
     
     # --- NEW: Added debug message for target list data ---
-    #print(f"[DEBUG] Target List TLV: Found {num_targets} targets.")
+    log_debug(f"[DEBUG] Target List TLV: Found {num_targets} targets.", 'log_can_interpolation')
 
     if num_targets > 0:
         targets = {

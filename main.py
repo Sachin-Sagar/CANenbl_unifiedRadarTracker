@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src'
 
 
 from radar_tracker.main import main as radar_main
-from radar_tracker.console_logger import setup_logging
+from radar_tracker.console_logger import logger
 from datetime import datetime
 if platform.system() == "Linux":
         from can_logger_app.gpio_handler import init_gpio, wait_for_switch_on, check_for_switch_off, cleanup_gpio, turn_on_led, turn_off_led
@@ -36,23 +36,22 @@ if __name__ == '__main__':
     output_dir = os.path.join("output", datetime.now().strftime('%Y%m%d_%H%M%S'))
     os.makedirs(output_dir, exist_ok=True)
 
-    # Configure logging for the entire application
-    setup_logging(output_dir)
+
 
     # --- Ask for mode ---
-    print("--- Welcome to the Unified Radar Tracker ---")
+    logger.info("--- Welcome to the Unified Radar Tracker ---")
     while True:
         mode = input("Select mode: (1) Live Tracking or (2) Playback from File\nEnter choice (1 or 2): ")
         if mode in ['1', '2']:
             break
         else:
-            print("Invalid choice. Please enter 1 or 2.")
+            logger.info("Invalid choice. Please enter 1 or 2.")
 
     can_interface = None # Initialize can_interface
 
     if mode == '1':
         # --- Ask for CAN interface ---
-        print("\n--- CAN Interface Selection ---")
+        logger.info("\n--- CAN Interface Selection ---")
         while True:
             can_interface_choice = input("Select CAN interface: (1) PEAK (pcan) or (2) Kvaser\nEnter choice (1 or 2): ").lower().strip()
             if can_interface_choice in ['1', 'peak', 'pcan']:
@@ -62,7 +61,7 @@ if __name__ == '__main__':
                 can_interface = 'kvaser'
                 break
             else:
-                print("Invalid choice. Please enter 1 or 2.")
+                logger.info("Invalid choice. Please enter 1 or 2.")
 
     # If on Raspberry Pi, wait for switch to be turned on
     if platform.system() == "Linux":
@@ -70,9 +69,9 @@ if __name__ == '__main__':
         can_logger_process = None
         try:
             init_gpio()
-            print("Waiting for switch ON...")
+            logger.info("Waiting for switch ON...")
             wait_for_switch_on()
-            print("Switch is ON!")
+            logger.info("Switch is ON!")
             turn_on_led()
 
             # Start the CAN logger in a separate process for live mode
@@ -90,21 +89,21 @@ if __name__ == '__main__':
 
             # Launch the appropriate mode
             if mode == '1':
-                print("\nStarting in LIVE mode...")
+                logger.info("\nStarting in LIVE mode...")
                 # MODIFIED: Pass the shared dict to the live radar main
                 main_live(output_dir, shutdown_flag, shared_live_can_data)
             elif mode == '2':
-                print("\nStarting in PLAYBACK mode...")
+                logger.info("\nStarting in PLAYBACK mode...")
                 run_playback(output_dir)
 
         finally:
             shutdown_flag.set() # Signal all processes to shutdown
 
             if can_logger_process and can_logger_process.is_alive():
-                print("Signaling CAN logger to shut down...")
+                logger.info("Signaling CAN logger to shut down...")
                 can_logger_process.join(timeout=5)
                 if can_logger_process.is_alive():
-                    print("CAN logger did not shut down, terminating...")
+                    logger.info("CAN logger did not shut down, terminating...")
                     can_logger_process.terminate()
                     can_logger_process.join()
 
@@ -112,7 +111,7 @@ if __name__ == '__main__':
                 turn_off_led()
             
             cleanup_gpio()
-            print("Application shut down.")
+            logger.info("Application shut down.")
 
     else: # Not on Linux
         
@@ -120,7 +119,7 @@ if __name__ == '__main__':
         live_thread = None
         try:
             if mode == '1':
-                print("\nStarting in LIVE mode...")
+                logger.info("\nStarting in LIVE mode...")
                 # Start the CAN logger process
                 # MODIFIED: Pass the shared dict and can_interface to the logger
                 can_logger_process = multiprocessing.Process(
@@ -141,24 +140,24 @@ if __name__ == '__main__':
                 live_thread.join()
 
             elif mode == '2':
-                print("\nStarting in PLAYBACK mode...")
+                logger.info("\nStarting in PLAYBACK mode...")
                 run_playback(output_dir)
 
         except KeyboardInterrupt:
-            print("\nCtrl+C detected. Shutting down...")
+            logger.info("\nCtrl+C detected. Shutting down...")
         finally:
             shutdown_flag.set() # Signal all processes to shutdown
 
             if live_thread and live_thread.is_alive():
-                print("Waiting for live tracker to finish...")
+                logger.info("Waiting for live tracker to finish...")
                 live_thread.join(timeout=5)
 
             if can_logger_process and can_logger_process.is_alive():
-                print("Signaling CAN logger to shut down gracefully...")
+                logger.info("Signaling CAN logger to shut down gracefully...")
                 can_logger_process.join(timeout=5) 
 
                 if can_logger_process.is_alive():
-                    print("CAN logger did not shut down, terminating...")
+                    logger.info("CAN logger did not shut down, terminating...")
                     can_logger_process.terminate()
                     can_logger_process.join()
             
@@ -170,4 +169,4 @@ if __name__ == '__main__':
                     break
             # -------------------------------------
 
-            print("Application shut down.")
+            logger.info("Application shut down.")
