@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2025-11-04
+
+### Fixed
+
+- **CAN Signals in Track History:** Resolved an issue where CAN-derived signals (e.g., `canVehSpeed_kmph`, `engagedGear`) were appearing as `null` in `track_history.json`. This was due to a mismatch in signal naming conventions between the `data_adapter.py` and `export_to_json.py` modules, and the `FHistFrame` object not explicitly storing the raw CAN signal values. The fix involved:
+    - Updating the `FHistFrame` class to include dedicated attributes for raw CAN signals.
+    - Modifying `data_adapter.py` to correctly populate these attributes from the `can_signals` dictionary.
+    - Adjusting `export_to_json.py` to read the CAN signal values from the newly added attributes on the `FHistFrame` object.
+
 ## [1.2.1] - 2025-11-04
 
 ### Fixed

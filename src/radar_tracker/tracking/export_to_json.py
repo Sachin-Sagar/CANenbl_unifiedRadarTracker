@@ -50,7 +50,7 @@ def create_visualization_data(all_tracks, fhist, params):
 
         # --- MODIFIED SECTION TO PREVENT CRASH ---
         # Get the gear value safely
-        gear_val = get_attr_safe(frame_data, 'Gear_Engaged_St_enum', None)
+        gear_val = get_attr_safe(frame_data, 'ETS_VCU_Gear_Engaged_St_enum', None)
         # Convert to float only if it's a valid number, otherwise keep it None
         if gear_val is not None:
             try:
@@ -62,9 +62,9 @@ def create_visualization_data(all_tracks, fhist, params):
             'timestamp': get_attr_safe(frame_data, 'timestamp'), 'frameIdx': i,
             'motionState': get_attr_safe(frame_data, 'motionState'),
             'egoVelocity': [get_attr_safe(frame_data, 'egoVx', 0), get_attr_safe(frame_data, 'egoVy', 0)],
-            'canVehSpeed_kmph': get_attr_safe(frame_data, 'VehSpeed_Act_kmph'),
+            'canVehSpeed_kmph': get_attr_safe(frame_data, 'ETS_VCU_VehSpeed_Act_kmph'),
             'correctedEgoSpeed_mps': get_attr_safe(frame_data, 'correctedEgoSpeed_mps'),
-            'shaftTorque_Nm': get_attr_safe(frame_data, 'ShaftTorque_Est_Nm'),
+            'shaftTorque_Nm': get_attr_safe(frame_data, 'ETS_MOT_ShaftTorque_Est_Nm'),
             'engagedGear': gear_val, # Use the safely converted value
             'estimatedAcceleration_mps2': get_attr_safe(frame_data, 'estimatedAcceleration_mps2'),
             'iirFilteredVx_ransac': get_attr_safe(frame_data, 'iirFilteredVx_ransac'),

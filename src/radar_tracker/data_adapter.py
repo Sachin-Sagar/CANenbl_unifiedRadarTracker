@@ -25,6 +25,11 @@ class FHistFrame:
         self.detectedClusterInfo = np.array([])
         self.filtered_barrier_x = None # Will be populated by the tracker
 
+        # --- NEW: Raw CAN signals for JSON export ---
+        self.ETS_VCU_VehSpeed_Act_kmph = np.nan
+        self.ETS_MOT_ShaftTorque_Est_Nm = np.nan
+        self.ETS_VCU_Gear_Engaged_St_enum = np.nan
+
 def adapt_frame_data_to_fhist(frame_data, current_timestamp_ms, can_signals=None):
     """
     Converts a real-time FrameData object into an FHistFrame object
@@ -52,14 +57,20 @@ def adapt_frame_data_to_fhist(frame_data, current_timestamp_ms, can_signals=None
 
     if can_signals:
         # Convert vehicle speed from km/h to m/s for the tracker
-        speed_kmh = can_signals.get('CAN_VS_KMH', 0.0)
+        speed_kmh = can_signals.get('ETS_VCU_VehSpeed_Act_kmph', 0.0)
         speed_mps = speed_kmh / 3.6
         
         fhist_frame.egoVx = speed_mps
         fhist_frame.correctedEgoSpeed_mps = speed_mps
+
+        # --- NEW: Store raw signals for JSON export ---
+        fhist_frame.ETS_VCU_VehSpeed_Act_kmph = speed_kmh
+        fhist_frame.ETS_MOT_ShaftTorque_Est_Nm = can_signals.get('ETS_MOT_ShaftTorque_Est_Nm', np.nan)
+        fhist_frame.ETS_VCU_Gear_Engaged_St_enum = can_signals.get('ETS_VCU_Gear_Engaged_St_enum', np.nan)
         
         if config.DEBUG_FLAGS.get('log_can_data_adapter'):
             logging.debug(f"[ADAPTER] Populated fhist_frame.egoVx with {speed_mps:.2f} m/s")
+            logging.debug(f"[ADAPTER] Stored raw CAN signals: Speed={fhist_frame.ETS_VCU_VehSpeed_Act_kmph}, Torque={fhist_frame.ETS_MOT_ShaftTorque_Est_Nm}, Gear={fhist_frame.ETS_VCU_Gear_Engaged_St_enum}")
 
         # NOTE: Add other signals like yaw rate ('CAN_YAW_RATE') if the tracker uses them.
         # For now, we are only using vehicle speed.

@@ -173,6 +173,24 @@ The most reliable solution is to **use PCAN hardware with the standard SocketCAN
 
 This approach bypasses the problematic proprietary driver layer entirely, providing a stable and well-supported connection to the CAN bus. The application's dynamic interface selection was designed specifically to handle this scenario.
 
+### Part 10: Bugfix - Missing CAN Signals in Final Output
+
+#### The Problem
+Despite the CAN data being correctly logged in `can_log.json` and interpolated in the live tracker, the final `track_history.json` file contained `null` values for all CAN-derived fields (e.g., `canVehSpeed_kmph`, `engagedGear`).
+
+#### The Diagnosis
+The root cause was a data flow disconnect between the data adaptation step and the final JSON export step:
+1.  **Inconsistent Naming:** The `data_adapter.py` module used one set of names for CAN signals when populating the `FHistFrame` object (e.g., calculating `egoVx` from `ETS_VCU_VehSpeed_Act_kmph`), but the `export_to_json.py` module expected different, shorter attribute names (e.g., `VehSpeed_Act_kmph`).
+2.  **Missing Raw Data:** The `FHistFrame` object was being populated with the processed `egoVx` (speed in m/s), but it was not storing the original, raw CAN signal values (like speed in km/h, gear status, or torque) that the final JSON schema required.
+
+#### The Solution
+A three-part fix was implemented to ensure the raw CAN data is carried through the entire pipeline to the final output:
+1.  **Expanded `FHistFrame`:** The `FHistFrame` class in `src/radar_tracker/data_adapter.py` was updated to include new attributes to hold the raw CAN signal values (e.g., `self.ETS_VCU_VehSpeed_Act_kmph = np.nan`).
+2.  **Populate Raw Values:** The `adapt_frame_data_to_fhist` function in the same file was modified. In addition to calculating `egoVx`, it now also populates the new raw signal attributes on the `fhist_frame` object directly from the incoming `can_signals` dictionary.
+3.  **Corrected JSON Export:** The `create_visualization_data` function in `src/radar_tracker/tracking/export_to_json.py` was updated to read the CAN values from the new, correctly named attributes on the `FHistFrame` object (e.g., `get_attr_safe(frame_data, 'ETS_VCU_VehSpeed_Act_kmph')`).
+
+This change ensures that the final `track_history.json` file accurately reflects the CAN data that was received during the live tracking session.
+
 ### Part 10: Kvaser PermissionError on Windows
 
 #### The Problem
