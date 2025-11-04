@@ -11,21 +11,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.propagate = False  # Prevent messages from being passed to the root logger
 
-# --- Create Handlers ---
-# The file and JSON handlers are always active to ensure persistent logging.
-output_dir = "output"
-os.makedirs(output_dir, exist_ok=True)
-
-log_filename_txt = os.path.join(output_dir, "console_log.txt")
-
-# File Handler (for plain text logs)
-file_handler = logging.FileHandler(log_filename_txt, mode='w')
-file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-logger.addHandler(file_handler)
-
-# JSON Handler (for structured logs)
+# --- JSON Handler for capturing logs in memory ---
 json_log_handler = JSONLogHandler()
-json_log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger.addHandler(json_log_handler)
 
 # --- Conditional Console Handler ---

@@ -2,7 +2,7 @@
 
 import json
 import numpy as np
-import logging
+from ..console_logger import logger
 import scipy.io as sio
 import config
 from .export_to_json import create_visualization_data
@@ -101,28 +101,28 @@ def update_and_save_history(all_tracks, fhist, json_filename="track_history.json
         params = {}
 
     if config.DEBUG_FLAGS.get('log_final_history') and fhist:
-        logging.debug("--- Final History Pre-Save Inspection ---")
+        logger.debug("--- Final History Pre-Save Inspection ---")
         num_frames = len(fhist)
         sample_indices = sorted(list(set([0, 1, 2, num_frames//2, num_frames-3, num_frames-2, num_frames-1])))
         for i in sample_indices:
             if 0 <= i < num_frames:
                 frame = fhist[i]
                 ego_vx = getattr(frame, 'egoVx', 'N/A')
-                logging.debug(f"[HISTORY] Frame {i}: egoVx = {ego_vx}")
+                logger.debug(f"[HISTORY] Frame {i}: egoVx = {ego_vx}")
 
     # --- 1. Save to JSON ---
     try:
         visualization_data = create_visualization_data(all_tracks, fhist, params)
         with open(json_filename, 'w') as f:
             json.dump(visualization_data, f, cls=NumpyEncoder, indent=4)
-        logging.info(f"Successfully saved pretty-printed JSON data to {json_filename}")
+        logger.info(f"Successfully saved pretty-printed JSON data to {json_filename}")
     except Exception as e:
-        logging.error(f"An error occurred while saving the JSON file: {e}")
+        logger.error(f"An error occurred while saving the JSON file: {e}")
 
     # --- 2. Save to .mat ---
     mat_filename = json_filename.replace('.json', '_python.mat')
     try:
-        logging.info("Converting Python data to MATLAB-compatible structs...")
+        logger.info("Converting Python data to MATLAB-compatible structs...")
         
         allTracks_mat = _convert_to_matlab_struct(all_tracks, struct_name='allTracks')
         fHist_mat = _convert_to_matlab_struct(fhist, struct_name='fHist')
@@ -133,6 +133,6 @@ def update_and_save_history(all_tracks, fhist, json_filename="track_history.json
         }
         
         sio.savemat(mat_filename, matlab_export_data, do_compression=True)
-        logging.info(f"Successfully saved data for MATLAB comparison to {mat_filename}")
+        logger.info(f"Successfully saved data for MATLAB comparison to {mat_filename}")
     except Exception as e:
-        logging.error(f"An error occurred while saving the .mat file: {e}")
+        logger.error(f"An error occurred while saving the .mat file: {e}")

@@ -36,6 +36,13 @@ if __name__ == '__main__':
     output_dir = os.path.join("output", datetime.now().strftime('%Y%m%d_%H%M%S'))
     os.makedirs(output_dir, exist_ok=True)
 
+    # --- Setup File-based Logging --- 
+    log_file_path = os.path.join(output_dir, "console_log.txt")
+    file_handler = logging.FileHandler(log_file_path, mode='w')
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logging.getLogger().addHandler(file_handler)
+    logging.getLogger().setLevel(logging.DEBUG) # Ensure root logger captures all levels
+
 
 
     # --- Ask for mode ---
@@ -160,13 +167,10 @@ if __name__ == '__main__':
                     logger.info("CAN logger did not shut down, terminating...")
                     can_logger_process.terminate()
                     can_logger_process.join()
-            
-            # --- Write console logs to JSON ---
-            for handler in logging.getLogger().handlers:
-                if isinstance(handler, JSONLogHandler):
-                    with open(os.path.join(output_dir, "console_log.json"), 'w') as f:
-                        json.dump(handler.log_records, f, indent=4)
-                    break
-            # -------------------------------------
-
             logger.info("Application shut down.")
+
+    # --- Write console logs to JSON at the very end ---
+    from src.radar_tracker.console_logger import json_log_handler
+    with open(os.path.join(output_dir, "console_log.json"), 'w') as f:
+        json.dump(json_log_handler.log_records, f, indent=4)
+    logger.info(f"Console log saved to {os.path.join(output_dir, 'console_log.json')}")

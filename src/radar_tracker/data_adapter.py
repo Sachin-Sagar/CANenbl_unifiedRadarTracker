@@ -1,7 +1,7 @@
 # src/data_adapter.py
 
 import numpy as np
-import logging
+from .console_logger import logger
 import config
 from .hardware.read_and_parse_frame import FrameData
 
@@ -53,7 +53,7 @@ def adapt_frame_data_to_fhist(frame_data, current_timestamp_ms, can_signals=None
 
     # --- NEW: Populate fhist_frame with live CAN data ---
     if config.DEBUG_FLAGS.get('log_can_data_adapter'):
-        logging.debug(f"[ADAPTER] Received CAN signals: {can_signals}")
+        logger.debug(f"[ADAPTER] Received CAN signals: {can_signals}")
 
     if can_signals:
         # Convert vehicle speed from km/h to m/s for the tracker
@@ -69,8 +69,8 @@ def adapt_frame_data_to_fhist(frame_data, current_timestamp_ms, can_signals=None
         fhist_frame.ETS_VCU_Gear_Engaged_St_enum = can_signals.get('ETS_VCU_Gear_Engaged_St_enum', np.nan)
         
         if config.DEBUG_FLAGS.get('log_can_data_adapter'):
-            logging.debug(f"[ADAPTER] Populated fhist_frame.egoVx with {speed_mps:.2f} m/s")
-            logging.debug(f"[ADAPTER] Stored raw CAN signals: Speed={fhist_frame.ETS_VCU_VehSpeed_Act_kmph}, Torque={fhist_frame.ETS_MOT_ShaftTorque_Est_Nm}, Gear={fhist_frame.ETS_VCU_Gear_Engaged_St_enum}")
+            logger.debug(f"[ADAPTER] Populated fhist_frame.egoVx with {speed_mps:.2f} m/s")
+            logger.debug(f"[ADAPTER] Stored raw CAN signals: Speed={fhist_frame.ETS_VCU_VehSpeed_Act_kmph}, Torque={fhist_frame.ETS_MOT_ShaftTorque_Est_Nm}, Gear={fhist_frame.ETS_VCU_Gear_Engaged_St_enum}")
 
         # NOTE: Add other signals like yaw rate ('CAN_YAW_RATE') if the tracker uses them.
         # For now, we are only using vehicle speed.
