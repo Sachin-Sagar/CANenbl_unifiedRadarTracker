@@ -169,11 +169,14 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
         for i in range(num_processes):
             p = multiprocessing.Process(
                 target=processing_worker,
-                args=(i, decoding_rules, raw_mp_queue, index_mp_queue, shared_mem_array, results_queue, perf_tracker, live_data_dict, can_logger_ready),
+                args=(i, decoding_rules, raw_mp_queue, index_mp_queue, shared_mem_array, results_queue, perf_tracker, live_data_dict),
                 daemon=True
             )
             processes.append(p)
             p.start()
+
+        if can_logger_ready:
+            can_logger_ready.set()
 
         print("\n[+] Logging data... Press Ctrl-C to stop.")
         while not (shutdown_flag and shutdown_flag.is_set()):
@@ -214,6 +217,10 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
 
         print("="*60 + "\n")
     finally:
+        # Ensure the ready event is set, even if an error occurred during setup.
+        if can_logger_ready and not can_logger_ready.is_set():
+            can_logger_ready.set()
+
         print(" -> Stopping worker threads and processes...")
         
         if dispatcher_thread and dispatcher_thread.is_alive():

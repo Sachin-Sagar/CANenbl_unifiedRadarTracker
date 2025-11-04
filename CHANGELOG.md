@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.5] - 2025-11-04
+
+### Fixed
+
+- **Application Stuck Without Live CAN:** Resolved an issue where the application would get stuck indefinitely (or for a long timeout) at the "waiting for CAN stage" if no live CAN hardware was connected or if the CAN logger failed to initialize. The fix involved:
+    - Modifying `src/can_logger_app/main.py` to ensure the `can_logger_ready` synchronization event is always set, regardless of whether the CAN bus connection is successful or not. This signal is now sent immediately after the CAN logger's worker processes are started, and as a fallback in the `finally` block.
+    - Removing the redundant event-setting logic from within the `processing_worker` in `src/can_logger_app/data_processor.py` to centralize control.
+    - This ensures that the `radar_tracker` process, which waits for this event, will always proceed without getting stuck, gracefully handling scenarios where CAN data is unavailable.
+
 ## [1.2.4] - 2025-11-04
 
 ### Fixed
