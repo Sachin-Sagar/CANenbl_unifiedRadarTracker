@@ -7,10 +7,11 @@ import queue
 
 LOG_ENTRY_FORMAT = struct.Struct('=dI32sd')
 
-def processing_worker(worker_id, decoding_rules, raw_queue, index_queue, shared_mem_array, results_queue, perf_tracker, live_data_dict=None):
+def processing_worker(worker_id, decoding_rules, raw_queue, index_queue, shared_mem_array, results_queue, perf_tracker, live_data_dict=None, can_logger_ready=None):
     """
     MODIFIED: Now accepts an optional 'live_data_dict' (a Manager.dict())
     to share the latest signal values with another process.
+    MODIFIED: Now accepts 'can_logger_ready' (a multiprocessing.Event) to signal when the first data is ready.
     """
     mem_view = memoryview(shared_mem_array)
     num_slots = len(shared_mem_array) // LOG_ENTRY_FORMAT.size
@@ -61,6 +62,12 @@ def processing_worker(worker_id, decoding_rules, raw_queue, index_queue, shared_
                         current_buffer.append((msg.timestamp, physical_value))
                         # Keep only the last 10 items
                         live_data_dict[name] = current_buffer[-10:]
+
+                        # --- 3. Signal that data is ready (NEW LOGIC) ---
+                        # If the event exists and is not set yet, set it.
+                        # This tells the radar_tracker it can start processing.
+                        if can_logger_ready and not can_logger_ready.is_set():
+                            can_logger_ready.set()
 
                     current_slot += 1
                     local_logged_signals.add(name)

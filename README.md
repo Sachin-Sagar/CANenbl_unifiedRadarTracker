@@ -25,6 +25,7 @@ The application can be run in two modes:
 * **DBC-Based Decoding:** Uses an industry-standard `.dbc` file to decode raw CAN messages into physical values.
 * **Multi-Interface Support:** Supports both PEAK (PCAN) and Kvaser hardware. The application prompts the user to choose an interface at startup and dynamically configures the correct backend (`pcan`, `socketcan`, or `kvaser`) for the host OS (Windows/Linux).
 *   **Real-time Fusion:** The CAN data is interpolated, synchronized with the radar frames, and integrated directly into the `FHistFrame` object to provide the tracker with the vehicle's state (e.g., speed) at the exact moment of the radar measurement.
+*   **Race Condition Fix for Live CAN Data:** Resolved a race condition where the radar tracker would start processing frames before live CAN data was available, leading to `egoVx` (ego vehicle speed) being consistently zero. A `multiprocessing.Event` is now used to synchronize the CAN logger and radar tracker, ensuring the tracker waits for the first CAN message to be processed before beginning its main loop.
 
 ### General
 
