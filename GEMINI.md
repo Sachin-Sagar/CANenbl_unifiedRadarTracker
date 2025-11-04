@@ -260,3 +260,16 @@ A synchronization mechanism was implemented to solve the race condition, and the
     -   The data access in `src/radar_tracker/main_live.py` was changed from `dict(self.shared_live_can_data)` to a manual deep copy. This ensures that the `radar_tracker` is working with a clean, local copy of the data and avoids any potential pitfalls with multiprocessing proxy objects.
 
 This solution completely resolves the timing issue, ensuring that the tracking algorithm correctly receives and utilizes live CAN data for ego-motion compensation.
+
+### Part 14: Feature Add - "No CAN" Mode
+
+#### The Goal
+To provide users with the flexibility to run the live tracking application using only the radar sensor, without requiring any CAN hardware to be connected. This is useful for testing the radar and tracking algorithms independently.
+
+#### The Implementation
+1.  **Modified `main.py`:**
+    *   The CAN interface selection prompt was updated to include a "No CAN" option.
+    *   If the user selects this option, the `can_logger_process` is not started.
+    *   The `main_live` function is called with `None` for the `shared_live_can_data` and `can_logger_ready` arguments.
+2.  **No Changes to `radar_tracker`:**
+    *   The `RadarWorker` in `src/radar_tracker/main_live.py` was already designed to handle cases where CAN data is not available. If the `shared_live_can_data` object is `None`, it simply skips the CAN interpolation step, and the vehicle's ego-motion (`egoVx`) defaults to zero. This existing robustness meant no further changes were needed in the radar tracker itself.

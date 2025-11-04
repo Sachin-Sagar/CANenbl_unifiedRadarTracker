@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.5] - 2025-11-04
+
+### Added
+
+- **'No CAN' Option:** Introduced a 'No CAN' option during CAN interface selection in Live Mode. This allows users to bypass CAN initialization entirely and run the radar tracking algorithm independently, without requiring any CAN hardware or data.
+
 ## [1.2.4] - 2025-11-04
 
 ### Fixed

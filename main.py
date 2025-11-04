@@ -42,7 +42,7 @@ if __name__ == '__main__':
     file_handler = logging.FileHandler(log_file_path, mode='w')
     file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     logging.getLogger().addHandler(file_handler)
-    logging.getLogger().setLevel(logging.DEBUG) # Ensure root logger captures all levels
+    logging.getLogger().setLevel(logging.INFO) # Change to logging.WARNING or logging.ERROR for less verbosity
 
 
 
@@ -61,15 +61,18 @@ if __name__ == '__main__':
         # --- Ask for CAN interface ---
         logger.info("\n--- CAN Interface Selection ---")
         while True:
-            can_interface_choice = input("Select CAN interface: (1) PEAK (pcan) or (2) Kvaser\nEnter choice (1 or 2): ").lower().strip()
+            can_interface_choice = input("Select CAN interface: (1) PEAK (pcan), (2) Kvaser, or (3) No CAN\nEnter choice (1, 2, or 3): ").lower().strip()
             if can_interface_choice in ['1', 'peak', 'pcan']:
                 can_interface = 'peak'
                 break
             elif can_interface_choice in ['2', 'kvaser']:
                 can_interface = 'kvaser'
                 break
+            elif can_interface_choice in ['3', 'no can', 'none']:
+                can_interface = None
+                break
             else:
-                logger.info("Invalid choice. Please enter 1 or 2.")
+                logger.info("Invalid choice. Please enter 1, 2, or 3.")
 
     # If on Raspberry Pi, wait for switch to be turned on
     if platform.system() == "Linux":
@@ -83,7 +86,7 @@ if __name__ == '__main__':
             turn_on_led()
 
             # Start the CAN logger in a separate process for live mode
-            if mode == '1':
+            if mode == '1' and can_interface is not None:
                 # MODIFIED: Pass the shared dict and can_interface to the logger
                 can_logger_process = multiprocessing.Process(
                     target=can_logger_main, 
@@ -128,13 +131,14 @@ if __name__ == '__main__':
         try:
             if mode == '1':
                 logger.info("\nStarting in LIVE mode...")
-                # Start the CAN logger process
-                # MODIFIED: Pass the shared dict and can_interface to the logger
-                can_logger_process = multiprocessing.Process(
-                    target=can_logger_main, 
-                    args=(shutdown_flag, output_dir, shared_live_can_data, can_interface, can_logger_ready)
-                )
-                can_logger_process.start()
+                # Start the CAN logger process only if an interface is selected
+                if can_interface is not None:
+                    # MODIFIED: Pass the shared dict and can_interface to the logger
+                    can_logger_process = multiprocessing.Process(
+                        target=can_logger_main, 
+                        args=(shutdown_flag, output_dir, shared_live_can_data, can_interface, can_logger_ready)
+                    )
+                    can_logger_process.start()
                 
                 # Start the main_live function in a separate thread
                 # MODIFIED: Pass the shared dict and ready event to the live radar main

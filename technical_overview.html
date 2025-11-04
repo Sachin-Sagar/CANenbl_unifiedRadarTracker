@@ -89,6 +89,48 @@
             border: 1px solid var(--border-color);
             overflow-x: auto;
         }
+        .infographic-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            align-items: start;
+        }
+        .infographic-col {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .infographic-box {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 1rem;
+            text-align: center;
+        }
+        .infographic-box h4 {
+            margin: 0 0 0.5rem 0;
+            color: var(--accent-blue);
+        }
+        .infographic-arrow {
+            font-size: 2rem;
+            color: var(--accent-green);
+            text-align: center;
+            margin: 0.5rem 0;
+        }
+        .infographic-data {
+            font-family: "Fira Code", monospace;
+            color: var(--accent-orange);
+            background-color: #1e2233;
+            padding: 0.5rem;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+        }
+        .infographic-data.bad {
+            color: var(--accent-red);
+        }
+        .infographic-data.good {
+            color: var(--accent-green);
+        }
     </style>
 </head>
 <body>
@@ -195,7 +237,65 @@
                 <li><strong>Live Data Fusion:</strong> The decoder processes also write the latest value of each signal into a <code>multiprocessing.Manager.dict()</code>. This special dictionary acts as a shared key-value store, allowing the main radar process to read the latest CAN data with minimal overhead, facilitating real-time sensor fusion.</li>
             </ul>
 
-            <h3>4. Flexible, User-Driven CAN Configuration</h3>
+            <h3>4. Solving the Live Data Race Condition</h3>
+            <p>A critical challenge in multi-process communication is ensuring data is available before it's requested. We solved a race condition where the radar tracker would start before any CAN data was ready.</p>
+            <div class="infographic-grid">
+                <div class="infographic-col">
+                    <h3 style="text-align: center; color: var(--accent-red);">Problem: Race Condition</h3>
+                    <div class="infographic-box">
+                        <h4>1. CAN Logger Process</h4>
+                        <p>Starts initializing...</p>
+                    </div>
+                    <div class="infographic-arrow">&darr;</div>
+                    <div class="infographic-box">
+                        <h4>2. Radar Tracker Process</h4>
+                        <p>Starts immediately and requests CAN data.</p>
+                    </div>
+                    <div class="infographic-arrow">&darr;</div>
+                    <div class="infographic-box">
+                        <h4>3. Shared Dictionary</h4>
+                        <p>Radar tracker reads the dictionary.</p>
+                        <div class="infographic-data bad">Result: {} (Empty)</div>
+                    </div>
+                     <div class="infographic-arrow">&darr;</div>
+                    <div class="infographic-box">
+                        <h4>4. CAN Logger Process</h4>
+                        <p>...finishes initializing and writes first CAN message.</p>
+                        <p><strong>Too late!</strong></p>
+                    </div>
+                </div>
+                <div class="infographic-col">
+                    <h3 style="text-align: center; color: var(--accent-green);">Solution: Synchronization Event</h3>
+                    <div class="infographic-box">
+                        <h4>1. CAN Logger Process</h4>
+                        <p>Starts initializing...</p>
+                    </div>
+                    <div class="infographic-arrow">&darr;</div>
+                    <div class="infographic-box">
+                        <h4>2. Radar Tracker Process</h4>
+                        <p>Starts and <strong>waits</strong> for the <code>can_logger_ready</code> signal.</p>
+                    </div>
+                    <div class="infographic-arrow">&darr;</div>
+                    <div class="infographic-box">
+                        <h4>3. CAN Logger Process</h4>
+                        <p>...finishes initializing, processes first message, and writes to the dictionary.</p>
+                        <div class="infographic-data good">Data: {'VehSpeed': 50.0}</div>
+                    </div>
+                    <div class="infographic-arrow">&darr;</div>
+                    <div class="infographic-box">
+                        <h4>4. CAN Logger Process</h4>
+                        <p>Sets the <code>can_logger_ready</code> event.</p>
+                    </div>
+                    <div class="infographic-arrow">&darr;</div>
+                    <div class="infographic-box">
+                        <h4>5. Radar Tracker Process</h4>
+                        <p>Receives signal and reads the dictionary.</p>
+                        <div class="infographic-data good">Result: {'VehSpeed': 50.0}</div>
+                    </div>
+                </div>
+            </div>
+
+            <h3>5. Flexible, User-Driven CAN Configuration</h3>
             <ul>
                 <li><strong>Feature:</strong> To support multiple types of CAN hardware, the static, OS-based configuration was replaced with an interactive prompt at startup.</li>
                 <li><strong>Implementation:</strong> The user can select between <code>PEAK</code> and <code>Kvaser</code>. The application then dynamically determines the correct <code>python-can</code> backend (<code>pcan</code>, <code>socketcan</code>, or <code>kvaser</code>) and channel configuration for the chosen hardware and host OS, improving flexibility and usability.</li>

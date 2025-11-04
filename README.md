@@ -139,7 +139,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ### CAN Configuration
 
-*   **Hardware Selection (Interactive):** In Live Mode, the application will first prompt you to select your CAN hardware: `PEAK (pcan)` or `Kvaser`. The correct `python-can` backend is then configured automatically based on your choice and operating system.
+*   **Hardware Selection (Interactive):** In Live Mode, the application will first prompt you to select your CAN hardware: `PEAK (pcan)`, `Kvaser`, or `No CAN`. The correct `python-can` backend is then configured automatically based on your choice and operating system. Selecting `No CAN` will bypass all CAN initialization and run the radar tracker independently.
 *   **DBC File:** Place your CAN database file (e.g., `VCU.dbc`) in the `input/` directory.
 *   **Signal List:** The list of signals to be logged and used by the tracker is defined in `input/master_sigList.txt`.
 

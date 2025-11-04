@@ -199,8 +199,13 @@ class RadarWorker(QObject):
         radar_posix_timestamp = radar_timestamp_ms / 1000.0
 
         if root_config.DEBUG_FLAGS.get('log_can_interpolation'):
-            # Use .get() for safety, though it should always be present
-            logger.debug(f"[INTERPOLATION] Shared CAN buffers: {can_buffers}")
+            # Calculate and log the average of the CAN signals for the frame
+            avg_can_data = {}
+            for signal_name, buffer in can_buffers.items():
+                if buffer:
+                    values = [item[1] for item in buffer]
+                    avg_can_data[signal_name] = np.mean(values)
+            logger.debug(f"[INTERPOLATION] Avg. CAN signals for frame: {avg_can_data}")
 
         for signal_name, buffer in can_buffers.items():
             if not buffer:
