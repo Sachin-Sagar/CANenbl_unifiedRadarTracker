@@ -113,3 +113,23 @@ The application now runs as expected on Windows (in a dry run):
 * It starts and shuts down gracefully without the `QObject` error.
 * The `can_logger_app` process correctly reports "unseen" signals (as expected when no hardware is connected) and exits cleanly.
 * The `radar_tracker` runs, and the main application exits without errors.
+
+### Part 7: Feature Add - Dynamic CAN Interface Selection
+
+#### The Goal
+Previously, the application automatically selected the CAN interface based on the operating system, which limited hardware flexibility. The goal was to allow the user to explicitly choose between different CAN hardware (PEAK and Kvaser) at runtime, ensuring the application works with multiple devices on both Windows and Linux.
+
+#### The Implementation
+
+1.  **Interactive Prompt:**
+    *   The OS-based detection in `src/can_logger_app/config.py` was removed entirely.
+    *   An interactive prompt was added to the main entrypoint (`main.py`). When starting in Live Mode, the application now asks the user to select between `PEAK (pcan)` or `Kvaser`.
+
+2.  **Dynamic Configuration:**
+    *   The user's choice is passed as an argument from the main process to the `can_logger_app` process.
+    *   Inside `src/can_logger_app/main.py`, this choice is used to dynamically construct the `bus_params` dictionary with the correct `interface` and `channel` for the selected hardware and host OS.
+        *   **PEAK:** Uses the `pcan` backend on Windows and the `socketcan` backend on Linux.
+        *   **Kvaser:** Uses the `kvaser` backend (via Kvaser's CANlib) on both Windows and Linux.
+
+3.  **Improved Error Handling:**
+    *   The fatal error message block in `src/can_logger_app/main.py` was enhanced. It now provides specific, actionable troubleshooting advice based on the combination of the selected hardware (`peak` or `kvaser`) and the operating system, making it easier for users to diagnose connection issues (e.g., missing drivers, incorrect permissions, or network interface status).

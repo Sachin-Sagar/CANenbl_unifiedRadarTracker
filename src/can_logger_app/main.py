@@ -10,7 +10,7 @@ import threading # <-- MODIFIED: Import threading
 
 # --- NOTE: Only modules needed by all processes remain at the top level ---
 
-def main(shutdown_flag=None, output_dir=None, live_data_dict=None):
+def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface_choice='peak'):
     """
     Main function using a shared memory pipeline and a high-performance queue.
     
@@ -18,6 +18,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None):
         shutdown_flag (multiprocessing.Event, optional): Event to signal shutdown. Defaults to None.
         output_dir (str, optional): Directory to save log files. Defaults to None, which uses config.OUTPUT_DIRECTORY.
         live_data_dict (multiprocessing.Manager.dict, optional): Shared dictionary to update with live CAN data.
+        can_interface_choice (str, optional): The chosen CAN interface ('peak' or 'kvaser'). Defaults to 'peak'.
     """
     # --- MODIFICATION: Imports are moved inside main() ---
     import can
@@ -30,6 +31,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None):
     # --------------------------------------------------------
 
     import signal
+    import platform # Import platform to be used locally
 
     def signal_handler(signum, frame):
         print("\n[+] SIGTERM received, shutting down gracefully...")
@@ -39,14 +41,31 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None):
     signal.signal(signal.SIGTERM, signal_handler)
 
     print("--- Real-Time CAN Logger ---")
+    print(f"--- (Using CAN Interface: {can_interface_choice}) ---")
     if live_data_dict is not None:
         print("--- (Live Radar Data Sharing ENABLED) ---")
 
 
+    # --- Pre-flight checks: Determine CAN parameters based on choice ---
+    OS_SYSTEM = platform.system()
+    if can_interface_choice == 'peak':
+        if OS_SYSTEM == "Windows":
+            can_interface = "pcan"
+            can_channel = "PCAN_USBBUS1"
+        else: # Linux
+            can_interface = "socketcan"
+            can_channel = "can0"
+    elif can_interface_choice == 'kvaser':
+        can_interface = "kvaser"
+        can_channel = 0
+    else:
+        print(f"Error: Invalid CAN interface choice '{can_interface_choice}'. Exiting.")
+        return
+        
     # --- Pre-flight checks: Bring up CAN interface on Linux ---
-    if config.OS_SYSTEM == "Linux":
+    if OS_SYSTEM == "Linux" and can_interface == 'socketcan':
         print("\n[+] Ensuring CAN interface is up...")
-        command = f"sudo ip link set {config.CAN_CHANNEL} up type can bitrate {config.CAN_BITRATE}"
+        command = f"sudo ip link set {can_channel} up type can bitrate {config.CAN_BITRATE}"
         print(f" -> Running: {command}")
         
         import subprocess
@@ -54,16 +73,16 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None):
         
         if result.returncode != 0:
             if "Device or resource busy" in result.stderr:
-                print(f" -> Interface '{config.CAN_CHANNEL}' is already up. Continuing.")
+                print(f" -> Interface '{can_channel}' is already up. Continuing.")
             else:
-                print(f"\nError: Failed to bring up CAN interface '{config.CAN_CHANNEL}'.")
-                print(f" -> The command 'sudo ip link set {config.CAN_CHANNEL} up' failed.")
+                print(f"\nError: Failed to bring up CAN interface '{can_channel}'.")
+                print(f" -> The command 'sudo ip link set {can_channel} up' failed.")
                 print(f" -> STDERR: {result.stderr.strip()}")
-                print(f"\n -> This usually means the device '{config.CAN_CHANNEL}' does not exist.")
+                print(f"\n -> This usually means the device '{can_channel}' does not exist.")
                 print(" -> Please check your CAN hardware connection and drivers.")
                 return 
         else:
-            print(f" -> Interface '{config.CAN_CHANNEL}' brought up successfully.")
+            print(f" -> Interface '{can_channel}' brought up successfully.")
 
     # --- 1. Load Configuration ---
     print("\n[+] Loading configuration...")
@@ -102,17 +121,16 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None):
     shared_mem_array = multiprocessing.RawArray('c', buffer_size)
     
     perf_tracker = manager.dict()
-    # MODIFIED: Bus object is removed from here
     processes = []
     
     dispatcher_thread = None
     log_writer_thread = None
 
     try:
-        # --- MODIFICATION: Create bus_params dict ---
+        # --- MODIFICATION: Create bus_params dict from user choice ---
         bus_params = {
-            "interface": config.CAN_INTERFACE,
-            "channel": config.CAN_CHANNEL,
+            "interface": can_interface,
+            "channel": can_channel,
             "bitrate": config.CAN_BITRATE,
             "receive_own_messages": False
         }
@@ -137,7 +155,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None):
         
         if not connection_success:
             # The event was not set; CANReader failed to connect
-            raise can.CanError(f"Failed to connect on '{config.CAN_INTERFACE}' channel {config.CAN_CHANNEL}. CANReader thread failed.")
+            raise can.CanError(f"Failed to connect on '{can_interface}' channel {can_channel}. CANReader thread failed.")
         
         print(" -> CAN Connection successful. Proceeding with logger setup.")
 
@@ -175,12 +193,25 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None):
         print("="*60)
         print(f"Error: {e}")
         print("\nTroubleshooting:")
-        print(" 1. Is the CAN hardware (e.g., PCAN-USB) securely connected?")
-        if config.OS_SYSTEM == "Linux":
-            print(" 2. Is the correct kernel driver loaded? (e.g., 'peak_usb')")
-            print(f" 3. Does the CAN interface '{config.CAN_CHANNEL}' exist? (check with 'ip link show')")
-        else: # Windows
-            print(" 2. Are the necessary drivers (e.g., PCAN-Basic) installed?")
+        print(" 1. Is the CAN hardware securely connected?")
+
+        if can_interface_choice == 'peak':
+            if OS_SYSTEM == "Windows":
+                print(" 2. Are the PCAN-Basic drivers installed?")
+                print(f" 3. Is the channel name '{can_channel}' correct for your device?")
+            else: # Linux
+                print(" 2. Is the 'peak_usb' kernel driver loaded? (check with 'lsmod | grep peak_usb')")
+                print(f" 3. Does the CAN interface '{can_channel}' exist? (check with 'ip link show')")
+                print(f" 4. Did you bring the interface up? (e.g., 'sudo ip link set {can_channel} up')")
+        
+        elif can_interface_choice == 'kvaser':
+            if OS_SYSTEM == "Windows":
+                print(" 2. Are the Kvaser CANlib drivers installed?")
+                print(f" 3. Is channel {can_channel} the correct one for your device?")
+            else: # Linux
+                print(" 2. Are the Kvaser linuxcan drivers and CANlib SDK installed correctly?")
+                print(" 3. Does your user have permission to access the device?")
+
         print("="*60 + "\n")
     finally:
         print(" -> Stopping worker threads and processes...")

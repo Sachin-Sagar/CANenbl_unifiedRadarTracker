@@ -23,7 +23,7 @@ The application can be run in two modes:
 * **High-Performance CAN Pipeline:** Utilizes a multiprocessing, shared-memory pipeline to reliably log signals from high-speed and low-speed CAN messages without data loss.
 * **Simultaneous Logging & Live-Share:** A single CAN process both logs all decoded signals to a `can_log.json` file and shares the latest signal values to the live radar tracker via a shared memory dictionary.
 * **DBC-Based Decoding:** Uses an industry-standard `.dbc` file to decode raw CAN messages into physical values.
-* **Cross-Platform:** Automatically detects the host OS (Windows or Linux) and selects the correct CAN backend (`pcan` or `socketcan`).
+* **Multi-Interface Support:** Supports both PEAK (PCAN) and Kvaser hardware. The application prompts the user to choose an interface at startup and dynamically configures the correct backend (`pcan`, `socketcan`, or `kvaser`) for the host OS (Windows/Linux).
 *   **Real-time Fusion:** The CAN data is interpolated, synchronized with the radar frames, and integrated directly into the `FHistFrame` object to provide the tracker with the vehicle's state (e.g., speed) at the exact moment of the radar measurement.
 
 ### General
@@ -109,52 +109,50 @@ source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
-5. Configuration
-Radar Configuration
-Sensor Profile: The radar sensor's operating parameters are defined in configs/profile_80_m_40mpsec_bsdevm_16tracks_dyClutter.cfg.
+### CAN Configuration
 
-COM Port: For live mode, you may need to edit src/radar_tracker/main_live.py and set the CLI_COMPORT_NUM variable to match your radar's serial port.
+*   **Hardware Selection (Interactive):** In Live Mode, the application will first prompt you to select your CAN hardware: `PEAK (pcan)` or `Kvaser`. The correct `python-can` backend is then configured automatically based on your choice and operating system.
+*   **DBC File:** Place your CAN database file (e.g., `VCU.dbc`) in the `input/` directory.
+*   **Signal List:** The list of signals to be logged and used by the tracker is defined in `input/master_sigList.txt`.
 
-CAN Configuration
-Hardware Settings: The CAN interface (pcan or socketcan), channel, and bitrate are configured in src/can_logger_app/config.py. The application will auto-detect the OS and attempt to bring up the interface automatically on Linux.
+### Linux Specifics
 
-DBC File: Place your CAN database file (e.g., VCU.dbc) in the input/ directory.
+If you are using a PEAK (PCAN) adapter on Linux, the application uses the `socketcan` backend. You must bring the interface up manually before running the script:
 
-Signal List: The list of signals to be logged and used by the tracker is defined in input/master_sigList.txt. The format is CAN_ID,Signal_Name,CycleTime.
+```bash
+# Replace can0 if your interface has a different name
+sudo ip link set can0 up type can bitrate 500000
+```
 
-6. Data Logging
+## 6. Data Logging
+
 All output data from a single session is saved into a unique, timestamped directory to prevent overwriting and to keep logs organized.
 
-Output Directory: output/YYYYMMDD_HHMMSS/
+*   **Output Directory:** `output/YYYYMMDD_HHMMSS/`
+*   **CAN Log:** `can_log_YYYY-MM-DD_HH-MM-SS.json` - A JSON Lines file containing all decoded CAN signals.
+*   **Radar Log:** `radar_log.json` - A log of the raw data frames from the radar sensor.
+*   **Track History:** `track_history.json` - The final, processed tracking data.
+*   **Console Log:** `console_log.json` - A JSON file containing all the console output from the application, useful for debugging.
 
-CAN Log: can_log_YYYY-MM-DD_HH-MM-SS.json - A JSON Lines file containing all decoded CAN signals.
+Upon shutdown, the CAN logger will print a **Data Logging Summary** to the console. This report details which signals from the monitoring list were successfully logged and which (if any) were never seen on the bus. This is useful for verifying that the CAN interface is working as expected.
 
-Radar Log: radar_log.json - A log of the raw data frames from the radar sensor.
+## 7. Usage
 
-Track History: track_history.json - The final, processed tracking data.
+1.  **Activate your virtual environment:**
+    ```bash
+    source .venv/bin/activate
+    ```
 
-Console Log: console_log.json - A JSON file containing all the console output from the application, useful for debugging.
+2.  **Run the application:**
+    ```bash
+    python main.py
+    ```
 
-Upon shutdown, the CAN logger will print a Data Logging Summary to the console. This report details which signals from the monitoring list were successfully logged and which (if any) were never seen on the bus. This is useful for verifying that the CAN interface is working as expected.
+3.  **Select CAN Interface (Live Mode):** The script will first prompt you to choose your CAN hardware.
+4.  **Select Mode:** Next, you will be prompted to choose between `(1) Live Tracking` or `(2) Playback from File`.
 
-During startup, you will see console messages indicating the initialization of the CAN data dispatcher and log writer threads, providing a clear view of the application's startup sequence.
-
-7. Usage
-Activate your virtual environment:
-
-Bash
-
-source .venv/bin/activate
-Run the application:
-
-Bash
-
-python main.py
-Select a mode: The script will first prompt you to choose between (1) Live Tracking or (2) Playback from File.
-
-On Raspberry Pi (Live Mode): After selecting Live Mode, the application will initialize and then wait for the physical switch (connected to GPIO 17) to be turned ON to start the radar tracking and CAN logging. To stop the application, turn the switch OFF.
-
-On Windows/other systems (Live Mode): The application will start immediately after mode selection. To stop the application, close the visualization window. The application is designed to detect the window closure and shut down gracefully.
+*   **On Raspberry Pi (Live Mode):** After the initial prompts, the application will wait for the physical switch (connected to GPIO 17) to be turned **ON** to start the radar tracking and CAN logging. To stop the application, turn the switch **OFF**.
+*   **On Windows/other systems (Live Mode):** The application will start immediately after mode selection. To stop the application, close the visualization window or press `Ctrl+C` in the console.
 
 In all cases, the application is designed to shut down gracefully. This ensures that all data is saved correctly and that a final diagnostic report for the CAN logger is printed to the console.
 

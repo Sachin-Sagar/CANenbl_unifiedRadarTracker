@@ -6,26 +6,8 @@ import platform
 # Modify the values here to match your setup.
 
 # --- CAN Hardware Settings ---
-# Automatically configure the CAN interface based on the operating system.
-# We assume a PCAN adapter is being used.
-
+# The CAN bitrate for the bus.
 CAN_BITRATE = 500000
-OS_SYSTEM = platform.system()
-
-if OS_SYSTEM == "Windows":
-    CAN_INTERFACE = "pcan"
-    # This is the default channel for the PCAN-USB adapter on Windows.
-    # You may need to change "PCAN_USBBUS1" if you have multiple adapters.
-    CAN_CHANNEL = "PCAN_USBBUS1"
-elif OS_SYSTEM == "Linux":
-    CAN_INTERFACE = "socketcan"
-    # This is the default channel for SocketCAN on Linux.
-    CAN_CHANNEL = "can0"
-else:
-    # Default to Kvaser or raise an error if unsupported OS
-    print(f"Warning: Unsupported OS '{OS_SYSTEM}'. Defaulting to 'kvaser'.")
-    CAN_INTERFACE = "kvaser"
-    CAN_CHANNEL = 0
 
 
 # --- General Settings ---
