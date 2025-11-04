@@ -8,7 +8,7 @@ from .json_log_handler import JSONLogHandler
 # --- Create a Singleton Logger Instance ---
 # This logger can be imported and used by any module in the application.
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 logger.propagate = False  # Prevent messages from being passed to the root logger
 
 # --- Create Handlers ---
