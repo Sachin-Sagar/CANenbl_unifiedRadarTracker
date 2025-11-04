@@ -4,7 +4,7 @@ import sys
 import time
 from datetime import datetime
 import numpy as np
-import logging
+from .console_logger import logger
 import psutil
 import os
 import serial.tools.list_ports
@@ -44,17 +44,17 @@ def select_com_port():
         default_port = 'COM11'
         ports = serial.tools.list_ports.comports()
         if not any(p.device == default_port for p in ports):
-            logging.warning(f"Default port {default_port} not found.")
+            logger.warning(f"Default port {default_port} not found.")
         return default_port
         
     elif sys.platform == "linux":
         ports = serial.tools.list_ports.comports()
         if not ports:
-            logging.error("No serial ports found. Please ensure the radar is connected and you have the necessary permissions (e.g., member of 'dialout' group).")
+            logger.error("No serial ports found. Please ensure the radar is connected and you have the necessary permissions (e.g., member of 'dialout' group).")
             return None
         elif len(ports) == 1:
             selected_port = ports[0].device
-            logging.info(f"Automatically selected serial port: {selected_port}")
+            logger.info(f"Automatically selected serial port: {selected_port}")
             return selected_port
         else:
             logger.info("Available serial ports:")
@@ -70,7 +70,7 @@ def select_com_port():
                 except ValueError:
                     logger.info("Invalid input.")
     else:
-        logging.error(f"Unsupported OS '{sys.platform}' detected. Please set COM port manually.")
+        logger.error(f"Unsupported OS '{sys.platform}' detected. Please set COM port manually.")
         return None
 
 class RadarWorker(QObject):
@@ -99,7 +99,7 @@ class RadarWorker(QObject):
         
         # MODIFIED: Store the shared dictionary, remove CAN manager
         self.shared_live_can_data = shared_live_can_data
-        logging.info(f"RadarWorker initialized. Live CAN data sharing is {'ENABLED' if shared_live_can_data is not None else 'DISABLED'}.")
+        logger.info(f"RadarWorker initialized. Live CAN data sharing is {'ENABLED' if shared_live_can_data is not None else 'DISABLED'}.")
 
 
     def run(self):
@@ -122,12 +122,12 @@ class RadarWorker(QObject):
                 from can_logger_app.gpio_handler import blink_onboard_led
                 blink_onboard_led(3)
             except ImportError:
-                logging.warning("Could not import gpio_handler to blink LED.")
+                logger.warning("Could not import gpio_handler to blink LED.")
 
 
         self.params_radar, self.h_data_port = self._configure_sensor()
         if not self.params_radar or not self.h_data_port:
-            logging.error("Failed to configure sensor. Exiting worker thread.")
+            logger.error("Failed to configure sensor. Exiting worker thread.")
             self.stop()
             self.finished.emit()
             self.close_visualizer.emit()
@@ -136,7 +136,7 @@ class RadarWorker(QObject):
         params_tracker = define_parameters()
         self.tracker = RadarTracker(params_tracker)
 
-        logging.info("--- Starting Live Tracking ---")
+        logger.info("--- Starting Live Tracking ---")
         while self.is_running:
             if self.shutdown_flag and self.shutdown_flag.is_set():
                 self.is_running = False
@@ -165,9 +165,9 @@ class RadarWorker(QObject):
                 mem_info = process.memory_info()
                 ram_mb = mem_info.rss / (1024 * 1024) 
                 cpu_percent = process.cpu_percent(interval=0.1)
-                logging.info(f"[PERFORMANCE] Frame: {self.tracker.frame_idx} | CPU: {cpu_percent:.2f}% | RAM: {ram_mb:.2f} MB")
+                logger.info(f"[PERFORMANCE] Frame: {self.tracker.frame_idx} | CPU: {cpu_percent:.2f}% | RAM: {ram_mb:.2f} MB")
 
-            logging.info(f"Frame: {self.tracker.frame_idx} | Detections: {frame_data.num_points} | Confirmed Tracks: {num_confirmed_tracks}")
+            logger.info(f"Frame: {self.tracker.frame_idx} | Detections: {frame_data.num_points} | Confirmed Tracks: {num_confirmed_tracks}")
 
             self.frame_ready.emit(frame_data)
 
@@ -186,7 +186,7 @@ class RadarWorker(QObject):
 
         if root_config.DEBUG_FLAGS.get('log_can_interpolation'):
             # Use .get() for safety, though it should always be present
-            logging.debug(f"[INTERPOLATION] Shared CAN buffers: {can_buffers}")
+            logger.debug(f"[INTERPOLATION] Shared CAN buffers: {can_buffers}")
 
         for signal_name, buffer in can_buffers.items():
             if not buffer:
@@ -204,7 +204,7 @@ class RadarWorker(QObject):
             can_data_for_frame[signal_name] = interp_value
 
         if root_config.DEBUG_FLAGS.get('log_can_interpolation'):
-            logging.debug(f"[INTERPOLATION] Interpolated CAN data for frame: {can_data_for_frame}")
+            logger.debug(f"[INTERPOLATION] Interpolated CAN data for frame: {can_data_for_frame}")
         
         return can_data_for_frame
 
@@ -219,29 +219,29 @@ class RadarWorker(QObject):
                 try: target_baud_rate = int(command.split()[1])
                 except (ValueError, IndexError): pass
                 break
-        logging.info("\n--- Starting Sensor Configuration ---")
+        logger.info("\n--- Starting Sensor Configuration ---")
         h_port = hw_comms_utils.configure_control_port(self.cli_com_port, INITIAL_BAUD_RATE)
         if not h_port: return None, None
         for command in cli_cfg:
-            logging.info(f"> {command}")
+            logger.info(f"> {command}")
             h_port.write((command + '\n').encode())
             time.sleep(0.1)
             if "baudRate" in command:
                 time.sleep(0.2)
                 try:
                     h_port.baudrate = target_baud_rate
-                    logging.info(f"  Baud rate changed to {target_baud_rate}")
+                    logger.info(f"  Baud rate changed to {target_baud_rate}")
                 except Exception as e:
-                    logging.error(f"ERROR: Failed to change baud rate: {e}")
+                    logger.error(f"ERROR: Failed to change baud rate: {e}")
                     h_port.close()
                     return None, None
-        logging.info("--- Configuration complete ---\n")
+        logger.info("--- Configuration complete ---\n")
         hw_comms_utils.reconfigure_port_for_data(h_port)
         return params, h_port
 
     def _save_tracking_history(self):
         """Saves the final processed tracking history."""
-        logging.info("\n--- Saving tracking history ---")
+        logger.info("\n--- Saving tracking history ---")
         if self.tracker and self.fhist_history:
             filename = os.path.join(self.output_dir, "track_history.json")
             update_and_save_history(
@@ -251,11 +251,11 @@ class RadarWorker(QObject):
                 params=self.tracker.params
             )
         else:
-            logging.warning("No frame history was processed, nothing to save.")
+            logger.warning("No frame history was processed, nothing to save.")
 
     def stop(self):
         """Stops the processing loop and the logger."""
-        logging.info("--- Stopping worker thread... ---")
+        logger.info("--- Stopping worker thread... ---")
         self.is_running = False
 
         if self.shutdown_flag:
@@ -271,14 +271,14 @@ class RadarWorker(QObject):
         
         if self.h_data_port and self.h_data_port.is_open:
             self.h_data_port.close()
-            logging.info("--- Serial port closed ---")
+            logger.info("--- Serial port closed ---")
 
 # MODIFIED: main() now accepts the shared dict
 def main(output_dir, shutdown_flag=None, shared_live_can_data=None):
     """Main application entry point."""
     cli_com_port = select_com_port()
     if cli_com_port is None:
-        logging.error("Could not determine COM port. Exiting live mode.")
+        logger.error("Could not determine COM port. Exiting live mode.")
         # We need to ensure the QApplication doesn't start, but also that the main script can exit gracefully.
         # A simple return should suffice, as the main script will then terminate.
         return

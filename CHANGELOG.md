@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Inconsistent Logging in `main_live.py`:** Corrected `main_live.py` to use the centralized application logger, ensuring all debug, info, warning, and error messages are consistently processed and displayed according to the global logging configuration. This resolves the issue where `[INTERPOLATION]` debug messages were not appearing in the console.
 - **Centralized Logging:** Refactored the entire logging infrastructure to resolve inconsistencies and bugs.
     - A single, application-wide logger is now defined in `src/radar_tracker/console_logger.py` and used consistently across all modules (`data_adapter.py`, `tracker.py`, `update_and_save_history.py`). This fixes the issue where debug logs were not being displayed or saved.
     - All file-based logging (`console_log.txt` and `console_log.json`) is now managed exclusively by `main.py` to prevent race conditions and ensure logs are correctly saved to the timestamped output directory. This resolves the bug where `console_log.txt` was being overwritten.
@@ -16,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Logging Helper Functions:** The `log_debug` and `log_component_debug` functions in `console_logger.py` were updated to use `logger.debug()` instead of `logger.info()`. This makes their behavior consistent with their names and the new `DEBUG` logging level, improving code clarity and maintainability.
 - **Improved Debuggability:** The logging system is now more robust, allowing for easier debugging of data flow issues.
 
 ## [1.2.2] - 2025-11-04

@@ -30,10 +30,10 @@ def log_debug(message, flag=None):
     Messages are always sent to file handlers, but only to console if ENABLE_CONSOLE_LOGGING is True.
     """
     if flag and config.DEBUG_FLAGS.get(flag, False):
-        logger.info(message)
+        logger.debug(message)
     elif not flag:
         # If no specific flag is required, log it as general info
-        logger.info(message)
+        logger.debug(message)
 
 def log_component_debug(message, component):
     """
@@ -41,4 +41,4 @@ def log_component_debug(message, component):
     Messages are always sent to file handlers, but only to console if ENABLE_CONSOLE_LOGGING is True.
     """
     if config.COMPONENT_DEBUG_FLAGS.get(component, False):
-        logger.info(f"[{component.upper()}] {message}")
+        logger.debug(f"[{component.upper()}] {message}")
