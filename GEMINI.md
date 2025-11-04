@@ -231,3 +231,32 @@ A comprehensive refactoring of the logging system was performed:
     - The shutdown sequence in `main.py` was fixed to reliably save the in-memory JSON logs to `console_log.json` in the timestamped directory, resolving the indentation error and race condition.
 4.  **Consistent Logger Usage in `main_live.py`:** The `src/radar_tracker/main_live.py` module was updated to import and use the centralized `logger` instance from `console_logger.py` instead of the standard `logging` module. This ensures that all messages (including `[INTERPOLATION]` debug messages) from the live radar processing are correctly routed through the application's logging infrastructure and appear in the console and log files.
 5.  **Consistent Logging Helper Functions:** The `log_debug` and `log_component_debug` functions in `console_logger.py` were updated to use `logger.debug()` instead of `logger.info()`. This makes their behavior consistent with their names and the new `DEBUG` logging level, improving code clarity and maintainability.
+
+### Part 13: CAN Data Not Used in Tracking Algorithm
+
+#### The Problem
+In live mode, although the CAN logger was correctly receiving and logging CAN signals to `can_log.json`, the radar tracking algorithm was not using this data. The `track_history.json` showed `null` or `0.0` for all ego-motion fields (like `egoVx`), and console logs confirmed that the `radar_tracker` process was receiving empty CAN data buffers.
+
+#### The Diagnosis
+A detailed review of the console logs revealed a critical timing issue:
+1.  The `radar_tracker` process would start, configure the radar sensor, and immediately begin its processing loop.
+2.  It would attempt to read from the `shared_live_can_data` dictionary in the very first frame.
+3.  However, the `can_logger_app` process, which runs in parallel, was still in its initialization phase (connecting to the CAN bus, starting worker processes). It had not yet received, decoded, or written any data to the shared dictionary.
+4.  The result was a race condition: the `radar_tracker` was always too fast and would read an empty dictionary, leading to the observed behavior.
+
+A secondary potential issue was also identified in how the `radar_tracker` read from the shared dictionary. It was using `dict(self.shared_live_can_data)`, which performs a shallow copy and could lead to issues with the underlying `multiprocessing.Proxy` objects.
+
+#### The Solution
+A synchronization mechanism was implemented to solve the race condition, and the data access method was made more robust:
+1.  **Synchronization with `multiprocessing.Event`:**
+    -   A new `multiprocessing.Event` named `can_logger_ready` was created in `main.py`.
+    -   This event is passed to both the `can_logger_app` process and the `radar_tracker` process.
+2.  **Signaling Readiness:**
+    -   The `can_logger_app`'s `data_processor.py` was modified. After a worker process successfully decodes its *first* CAN message and writes it to the `shared_live_can_data` dictionary, it sets the `can_logger_ready` event. This serves as a definitive signal that live data is flowing.
+3.  **Waiting for Readiness:**
+    -   The `radar_tracker`'s `main_live.py` was updated. Before entering its main processing loop, the `RadarWorker` now calls `can_logger_ready.wait(timeout=10.0)`.
+    -   This call blocks the `RadarWorker`, forcing it to wait up to 10 seconds for the signal from the CAN logger. Once the event is set, the worker proceeds, now guaranteed that there is data in the shared dictionary.
+4.  **Robust Data Access:**
+    -   The data access in `src/radar_tracker/main_live.py` was changed from `dict(self.shared_live_can_data)` to a manual deep copy. This ensures that the `radar_tracker` is working with a clean, local copy of the data and avoids any potential pitfalls with multiprocessing proxy objects.
+
+This solution completely resolves the timing issue, ensuring that the tracking algorithm correctly receives and utilizes live CAN data for ego-motion compensation.

@@ -83,7 +83,7 @@ class RadarWorker(QObject):
     close_visualizer = pyqtSignal()
 
     # MODIFIED: Accepts shared_live_can_data dict
-    def __init__(self, cli_com_port, config_file, output_dir, shutdown_flag=None, shared_live_can_data=None):
+    def __init__(self, cli_com_port, config_file, output_dir, shutdown_flag=None, shared_live_can_data=None, can_logger_ready=None):
         super().__init__()
         self.cli_com_port = cli_com_port
         self.config_file = config_file
@@ -96,6 +96,7 @@ class RadarWorker(QObject):
         self.logger_thread = None
         self.data_logger = None
         self.shutdown_flag = shutdown_flag
+        self.can_logger_ready = can_logger_ready
         
         # MODIFIED: Store the shared dictionary, remove CAN manager
         self.shared_live_can_data = shared_live_can_data
@@ -135,6 +136,15 @@ class RadarWorker(QObject):
 
         params_tracker = define_parameters()
         self.tracker = RadarTracker(params_tracker)
+
+        # Wait for the CAN logger to be ready
+        if self.can_logger_ready:
+            logger.debug("--- RadarWorker: Waiting for CAN logger to be ready... ---")
+            ready = self.can_logger_ready.wait(timeout=10.0) # 10-second timeout
+            if ready:
+                logger.debug("--- RadarWorker: CAN logger is ready. Starting tracking. ---")
+            else:
+                logger.warning("--- RadarWorker: Timed out waiting for CAN logger. Tracking will proceed without live CAN data. ---")
 
         logger.info("--- Starting Live Tracking ---")
         while self.is_running:
@@ -179,9 +189,13 @@ class RadarWorker(QObject):
         # MODIFIED: Read from the shared dict
         if self.shared_live_can_data is None:
             return {}
-            
-        # Create a local, non-proxy copy for safe iteration
-        can_buffers = dict(self.shared_live_can_data)
+
+        # Create a deep copy of the shared data to avoid proxy issues
+        can_buffers = {}
+        if root_config.DEBUG_FLAGS.get('log_can_interpolation'):
+            logger.debug(f"[INTERPOLATION] Raw shared_live_can_data: {self.shared_live_can_data}")
+        for key, value in self.shared_live_can_data.items():
+            can_buffers[key] = list(value)
         radar_posix_timestamp = radar_timestamp_ms / 1000.0
 
         if root_config.DEBUG_FLAGS.get('log_can_interpolation'):
@@ -274,7 +288,7 @@ class RadarWorker(QObject):
             logger.info("--- Serial port closed ---")
 
 # MODIFIED: main() now accepts the shared dict
-def main(output_dir, shutdown_flag=None, shared_live_can_data=None):
+def main(output_dir, shutdown_flag=None, shared_live_can_data=None, can_logger_ready=None):
     """Main application entry point."""
     cli_com_port = select_com_port()
     if cli_com_port is None:
@@ -292,7 +306,8 @@ def main(output_dir, shutdown_flag=None, shared_live_can_data=None):
         CONFIG_FILE_PATH, 
         output_dir, 
         shutdown_flag,
-        shared_live_can_data
+        shared_live_can_data,
+        can_logger_ready
     )
     
     radar_worker.moveToThread(worker_thread)

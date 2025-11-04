@@ -10,7 +10,7 @@ import threading # <-- MODIFIED: Import threading
 
 # --- NOTE: Only modules needed by all processes remain at the top level ---
 
-def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface_choice='peak'):
+def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface_choice='peak', can_logger_ready=None):
     """
     Main function using a shared memory pipeline and a high-performance queue.
     
@@ -169,7 +169,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
         for i in range(num_processes):
             p = multiprocessing.Process(
                 target=processing_worker,
-                args=(i, decoding_rules, raw_mp_queue, index_mp_queue, shared_mem_array, results_queue, perf_tracker, live_data_dict),
+                args=(i, decoding_rules, raw_mp_queue, index_mp_queue, shared_mem_array, results_queue, perf_tracker, live_data_dict, can_logger_ready),
                 daemon=True
             )
             processes.append(p)

@@ -7,7 +7,7 @@ import queue
 
 LOG_ENTRY_FORMAT = struct.Struct('=dI32sd')
 
-def processing_worker(worker_id, decoding_rules, raw_queue, index_queue, shared_mem_array, results_queue, perf_tracker, live_data_dict=None):
+def processing_worker(worker_id, decoding_rules, raw_queue, index_queue, shared_mem_array, results_queue, perf_tracker, live_data_dict=None, can_logger_ready=None):
     """
     MODIFIED: Now accepts an optional 'live_data_dict' (a Manager.dict())
     to share the latest signal values with another process.
@@ -16,6 +16,7 @@ def processing_worker(worker_id, decoding_rules, raw_queue, index_queue, shared_
     num_slots = len(shared_mem_array) // LOG_ENTRY_FORMAT.size
     current_slot = 0
     local_logged_signals = set()
+    event_set = False
 
     try:
         while True:
@@ -61,6 +62,11 @@ def processing_worker(worker_id, decoding_rules, raw_queue, index_queue, shared_
                         current_buffer.append((msg.timestamp, physical_value))
                         # Keep only the last 10 items
                         live_data_dict[name] = current_buffer[-10:]
+
+                        # Signal that the logger is ready after processing the first message
+                        if not event_set and can_logger_ready is not None:
+                            can_logger_ready.set()
+                            event_set = True
 
                     current_slot += 1
                     local_logged_signals.add(name)

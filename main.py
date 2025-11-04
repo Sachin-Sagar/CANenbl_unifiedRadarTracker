@@ -30,6 +30,7 @@ if __name__ == '__main__':
     # --- Create the Manager and shared data structures FIRST ---
     manager = multiprocessing.Manager()
     shutdown_flag = multiprocessing.Event()
+    can_logger_ready = multiprocessing.Event() # Event to signal CAN logger readiness
     shared_live_can_data = manager.dict() # This dict will be shared
 
     # Create a timestamped output directory
@@ -86,7 +87,7 @@ if __name__ == '__main__':
                 # MODIFIED: Pass the shared dict and can_interface to the logger
                 can_logger_process = multiprocessing.Process(
                     target=can_logger_main, 
-                    args=(shutdown_flag, output_dir, shared_live_can_data, can_interface)
+                    args=(shutdown_flag, output_dir, shared_live_can_data, can_interface, can_logger_ready)
                 )
                 can_logger_process.start()
 
@@ -97,8 +98,8 @@ if __name__ == '__main__':
             # Launch the appropriate mode
             if mode == '1':
                 logger.info("\nStarting in LIVE mode...")
-                # MODIFIED: Pass the shared dict to the live radar main
-                main_live(output_dir, shutdown_flag, shared_live_can_data)
+                # MODIFIED: Pass the shared dict and ready event to the live radar main
+                main_live(output_dir, shutdown_flag, shared_live_can_data, can_logger_ready)
             elif mode == '2':
                 logger.info("\nStarting in PLAYBACK mode...")
                 run_playback(output_dir)
@@ -131,15 +132,15 @@ if __name__ == '__main__':
                 # MODIFIED: Pass the shared dict and can_interface to the logger
                 can_logger_process = multiprocessing.Process(
                     target=can_logger_main, 
-                    args=(shutdown_flag, output_dir, shared_live_can_data, can_interface)
+                    args=(shutdown_flag, output_dir, shared_live_can_data, can_interface, can_logger_ready)
                 )
                 can_logger_process.start()
                 
                 # Start the main_live function in a separate thread
-                # MODIFIED: Pass the shared dict to the live radar main
+                # MODIFIED: Pass the shared dict and ready event to the live radar main
                 live_thread = threading.Thread(
                     target=main_live, 
-                    args=(output_dir, shutdown_flag, shared_live_can_data)
+                    args=(output_dir, shutdown_flag, shared_live_can_data, can_logger_ready)
                 )
                 live_thread.start()
                 

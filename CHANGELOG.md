@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2025-11-04
+
+### Fixed
+
+- **CAN Data Not Used by Tracking Algorithm:** Resolved an issue where live CAN data (e.g., ego vehicle speed) was not being correctly integrated into the radar tracking algorithm, resulting in `egoVx` being consistently `0.0` in the `track_history.json`. The fix involved:
+    - Implementing a `multiprocessing.Event` (`can_logger_ready`) to synchronize the `can_logger_app` and `radar_tracker` processes, ensuring the tracker waits for CAN data to be available before processing frames.
+    - Modifying `src/can_logger_app/data_processor.py` to set `can_logger_ready` after the first CAN message is processed and written to the shared dictionary.
+    - Updating `src/radar_tracker/main_live.py` to wait for `can_logger_ready` before entering the main tracking loop.
+    - Correcting the access method for the `multiprocessing.Manager.dict` in `src/radar_tracker/main_live.py` to ensure a proper deep copy of the shared data, preventing issues with proxy objects.
+
 ## [1.2.3] - 2025-11-04
 
 ### Fixed
