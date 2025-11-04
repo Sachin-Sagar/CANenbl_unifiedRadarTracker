@@ -147,3 +147,28 @@ The hardware check was refactored and moved out of the global scope.
 1.  A new function, `select_com_port()`, was created in `src/radar_tracker/main_live.py` to contain all the serial port detection and selection logic.
 2.  The `main()` function within `main_live.py` (which is only called when Live Mode is active) was updated to call `select_com_port()` at the beginning of its execution.
 3.  This change ensures that the hardware is only checked for when Live Mode is explicitly chosen, allowing Playback Mode to run without any connected hardware as intended.
+
+### Part 9: Kvaser Interface Failure on Linux
+
+#### The Problem
+When selecting the `Kvaser` interface on a Linux system, the application fails to initialize the CAN logger and crashes. The console shows a `NameError` originating from the `python-can` library's Kvaser backend.
+
+```
+NameError: name 'canGetNumberOfChannels' is not defined
+```
+
+This prevents the application from running with Kvaser hardware on Linux, even if the official Kvaser drivers and `canlib` are installed.
+
+#### The Diagnosis
+This error indicates a low-level incompatibility between the `python-can` library's `kvaser` backend and the specific version of the proprietary Kvaser `canlib` driver installed on the Linux system. The `ctypes` wrapper used by `python-can` is unable to find the expected `canGetNumberOfChannels` function within the shared library provided by the driver.
+
+This is a recurring issue, previously diagnosed during development on other Linux platforms (e.g., Raspberry Pi), and is not a bug in the application's own code. It stems from the fragility of the interaction between `python-can` and Kvaser's proprietary, non-standard driver stack on Linux.
+
+#### The Solution / Workaround
+The most reliable solution is to **use PCAN hardware with the standard SocketCAN interface on Linux**.
+
+1.  **Hardware:** Use a PCAN-USB adapter instead of a Kvaser device.
+2.  **Interface Selection:** When prompted by the application, select `PEAK (pcan)`. The application will automatically use the stable `socketcan` backend, which is integrated directly into the Linux kernel.
+3.  **Kernel Drivers:** The necessary `peak_usb` kernel module is included in most modern Linux distributions, including Debian/Raspbian, making setup much simpler than with Kvaser's proprietary drivers.
+
+This approach bypasses the problematic proprietary driver layer entirely, providing a stable and well-supported connection to the CAN bus. The application's dynamic interface selection was designed specifically to handle this scenario.

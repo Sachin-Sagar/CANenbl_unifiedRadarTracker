@@ -53,7 +53,32 @@ The application consists of three main components running in parallel to ensure 
 
 This architecture solves the Windows-specific hardware and threading conflicts by ensuring only one process accesses the CAN bus, and that the `can.Bus` object is created, used, and destroyed all within the same thread.
 
-## 4. Installation and Setup
+## 5. Hardware Setup and Recommendations
+
+For the best experience in **Live Mode**, please follow these hardware recommendations.
+
+### Recommended Hardware
+
+*   **On Linux (including Raspberry Pi):**
+    *   **Hardware:** **PCAN-USB Adapter**.
+    *   **Interface:** **SocketCAN**.
+    *   **Reasoning:** The `socketcan` interface is natively supported by the Linux kernel, making it extremely stable and reliable. The necessary drivers are typically pre-installed. When the application prompts for an interface, choose **PEAK (pcan)**, and it will automatically use the `socketcan` backend.
+
+*   **On Windows:**
+    *   **Hardware:** **PCAN-USB Adapter**.
+    *   **Interface:** **PCAN-Basic**.
+    *   **Reasoning:** The PCAN-Basic driver provides a stable, well-supported interface for `python-can` on Windows.
+
+### Kvaser Hardware (Use With Caution on Linux)
+
+While the application includes `Kvaser` as an interface option, it is **not recommended for use on Linux**.
+
+*   **The Issue:** There is a known, recurring incompatibility between `python-can` and Kvaser's proprietary Linux drivers (`canlib`). This can lead to runtime crashes (e.g., `NameError: name 'canGetNumberOfChannels' is not defined`), even if the drivers appear to be installed correctly.
+*   **Recommendation:** If you are on Linux, use a PCAN adapter to avoid these driver-related issues. If you must use Kvaser, be aware that it may not be stable.
+
+For details on installing drivers, see the **Installation and Setup** section.
+
+## 6. Data Logging
 
 ### Prerequisites
 

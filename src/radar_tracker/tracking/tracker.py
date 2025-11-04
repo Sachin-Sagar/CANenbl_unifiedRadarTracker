@@ -77,7 +77,10 @@ class RadarTracker:
          )
         
         if outlier_indices.size > 0: current_frame.isOutlier[outlier_indices] = True
-        current_frame.egoVx = self.ego_kf_state['x'][0, 0]
+        # The egoVx value is now populated from the CAN signal in the data_adapter.
+        # The ego-motion estimator uses the CAN speed as a primary input, but we
+        # preserve the original CAN value in the final history. We only take the
+        # estimated lateral velocity (egoVy) from the filter.
         current_frame.egoVy = self.ego_kf_state['x'][1, 0]
 
         all_indices = np.arange(num_points)
