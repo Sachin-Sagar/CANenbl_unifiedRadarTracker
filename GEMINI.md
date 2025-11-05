@@ -13,19 +13,19 @@ The goal is to have the CAN logger run as a background service that **both** log
 The final architecture consists of two main processes to ensure stability, performance, and cross-platform compatibility (especially on Windows):
 
 1.  **Main/Radar Process (Main Thread + QThread):**
-    * Runs the `main.py` script.
-    * Creates a `multiprocessing.Manager` and a shared dictionary (`live_data_dict`).
-    * Launches the **CAN Process** (`can_logger_app`).
-    * Launches the `RadarWorker` in a `QThread` (the `main_live` app).
-    * The `RadarWorker` reads from the `live_data_dict`, interpolates the data, and runs the tracking algorithm.
+    *   Runs the `main.py` script.
+    *   Creates a `multiprocessing.Manager` and a shared dictionary (`live_data_dict`).
+    *   Launches the **CAN Process** (`can_logger_app`).
+    *   Launches the `RadarWorker` in a `QThread` (the `main_live` app).
+    *   The `RadarWorker` reads from the `live_data_dict`, interpolates the data, and runs the tracking algorithm.
 
 2.  **CAN Process (`multiprocessing.Process`):**
-    * This single process is given exclusive control of the CAN hardware.
-    * It runs the `can_logger_app.main` function.
-    * **CANReader Thread:** A dedicated `threading.Thread` *within this process* is now responsible for the entire lifecycle of the `can.interface.Bus` object (create, use, destroy) to solve Qt threading errors.
-    * **Worker Pool:** A pool of sub-processes decodes CAN messages.
-    * **LogWriter Thread:** Writes all decoded signals to `can_log.json`.
-    * **Live Data Sharing:** The worker pool also writes the latest signal values into the `live_data_dict` provided by the Main Process.
+    *   This single process is given exclusive control of the CAN hardware.
+    *   It runs the `can_logger_app.main` function.
+    *   **CANReader Thread:** A dedicated `threading.Thread` *within this process* is now responsible for the entire lifecycle of the `can.interface.Bus` object (create, use, destroy) to solve Qt threading errors.
+    *   **Worker Pool:** A pool of sub-processes decodes CAN messages.
+    *   **LogWriter Thread:** Writes all decoded signals to `can_log.json`.
+    *   **Live Data Sharing:** The worker pool also writes the latest signal values into the `live_data_dict` provided by the Main Process.
 
 This architecture solves all hardware resource conflicts and Windows-specific threading errors.
 
@@ -41,11 +41,11 @@ After merging the code, the app failed on Windows with two symptoms:
 
 ### Part 2: Diagnosis & Solution - The "Unified CAN Process"
 
-* **Diagnosis (Hardware Conflict):** We discovered that two different parts of the code were trying to control the PCAN hardware at the same time:
+*   **Diagnosis (Hardware Conflict):** We discovered that two different parts of the code were trying to control the PCAN hardware at the same time:
     1.  The `can_logger_app` process (to write the log file).
     2.  The `LiveCANManager` (started by the radar's `QThread`, to provide live data).
-* The PCAN driver only allows **one** process to connect. Whichever process lost this "race" would fail. This was why the `can_log.json` was missing—the logger was losing the race.
-* **Solution (The Unified Process):**
+*   The PCAN driver only allows **one** process to connect. Whichever process lost this "race" would fail. This was why the `can_log.json` was missing—the logger was losing the race.
+*   **Solution (The Unified Process):**
     1.  **Eliminate `LiveCANManager`:** We completely removed the `src/can_service/live_can_manager.py` from the `radar_tracker`'s execution path.
     2.  **Promote `can_logger_app`:** We made the `can_logger_app` the *only* process that touches the CAN hardware.
     3.  **Implement Sharing:** We modified `main.py` to create a `multiprocessing.Manager.dict()` and pass it to *both* processes.
@@ -56,16 +56,16 @@ After merging the code, the app failed on Windows with two symptoms:
 
 After fixing the hardware conflict, the `QObject` error *still* persisted.
 
-* **Diagnosis (Qt Thread Ownership):** The `pcan` backend for `python-can` uses Qt internally. Qt has a strict rule: **A QObject must be created, used, and destroyed all in the same thread.**
-* Our code was violating this:
+*   **Diagnosis (Qt Thread Ownership):** The `pcan` backend for `python-can` uses Qt internally. Qt has a strict rule: **A QObject must be created, used, and destroyed all in the same thread.**
+*   Our code was violating this:
     1.  **Creation:** `can_logger_app/main.py` created the `can.interface.Bus(...)` object in the **Main Thread**.
     2.  **Usage:** `can_logger_app/can_handler.py` called `bus.recv()` in the **CANReader Thread**.
     3.  **Destruction:** The `bus` object was destroyed by the **Main Thread** when the process exited.
-* This cross-thread interaction is what caused the "Timers cannot be stopped from another thread" error.
+*   This cross-thread interaction is what caused the "Timers cannot be stopped from another thread" error.
 
 ### Part 4: The Final Solution (Thread-Local Bus)
 
-* **The Fix:** We moved the `can.interface.Bus` creation *into* the `CANReader` thread.
+*   **The Fix:** We moved the `can.interface.Bus` creation *into* the `CANReader` thread.
     1.  `src/can_logger_app/main.py` was changed to no longer create the `bus` object. It now just passes the `bus_params` (a dictionary) to the `CANReader`.
     2.  It also creates a `threading.Event` (`connection_event`) and waits on it.
     3.  `src/can_logger_app/can_handler.py` was updated. Its `run()` method now creates the `can.interface.Bus` itself.
@@ -74,9 +74,9 @@ After fixing the hardware conflict, the `QObject` error *still* persisted.
 
 ### Part 5: Cosmetic Fix (Log Spam)
 
-* **Problem:** The console was spammed with `"EXECUTING ROBUST PARSING SCRIPT"` messages.
-* **Cause:** This `print` statement was in the global scope of `src/radar_tracker/hardware/parsing_utils.py`. On Windows, `multiprocessing` re-imports all scripts for each new worker process, causing the `print` to re-run.
-* **Solution:** Removed the `print` statements from the global scope of `parsing_utils.py`.
+*   **Problem:** The console was spammed with `"EXECUTING ROBUST PARSING SCRIPT"` messages.
+*   **Cause:** This `print` statement was in the global scope of `src/radar_tracker/hardware/parsing_utils.py`. On Windows, `multiprocessing` re-imports all scripts for each new worker process, causing the `print` to re-run.
+*   **Solution:** Removed the `print` statements from the global scope of `parsing_utils.py`.
 
 ### Part 6: Integrating CAN Data into Radar Tracker
 
@@ -109,9 +109,9 @@ This final set of changes ensures that CAN data is correctly integrated, and tim
 ## 4. Final Status
 
 The application now runs as expected on Windows (in a dry run):
-* It starts and shuts down gracefully without the `QObject` error.
-* The `can_logger_app` process correctly reports "unseen" signals (as expected when no hardware is connected) and exits cleanly.
-* The `radar_tracker` runs, and the main application exits without errors.
+*   It starts and shuts down gracefully without the `QObject` error.
+*   The `can_logger_app` process correctly reports "unseen" signals (as expected when no hardware is connected) and exits cleanly.
+*   The `radar_tracker` runs, and the main application exits without errors.
 
 ### Part 7: Feature Add - Dynamic CAN Interface Selection
 
@@ -121,17 +121,17 @@ Previously, the application automatically selected the CAN interface based on th
 #### The Implementation
 
 1.  **Interactive Prompt:**
-    * The OS-based detection in `src/can_logger_app/config.py` was removed entirely.
-    * An interactive prompt was added to the main entrypoint (`main.py`). When starting in Live Mode, the application now asks the user to select between `PEAK (pcan)` or `Kvaser`.
+    *   The OS-based detection in `src/can_logger_app/config.py` was removed entirely.
+    *   An interactive prompt was added to the main entrypoint (`main.py`). When starting in Live Mode, the application now asks the user to select between `PEAK (pcan)` or `Kvaser`.
 
 2.  **Dynamic Configuration:**
-    * The user's choice is passed as an argument from the main process to the `can_logger_app` process.
-    * Inside `src/can_logger_app/main.py`, this choice is used to dynamically construct the `bus_params` dictionary with the correct `interface` and `channel` for the selected hardware and host OS.
-        * **PEAK:** Uses the `pcan` backend on Windows and the `socketcan` backend on Linux.
-        * **Kvaser:** Uses the `kvaser` backend (via Kvaser's CANlib) on both Windows and Linux.
+    *   The user's choice is passed as an argument from the main process to the `can_logger_app` process.
+    *   Inside `src/can_logger_app/main.py`, this choice is used to dynamically construct the `bus_params` dictionary with the correct `interface` and `channel` for the selected hardware and host OS.
+        *   **PEAK:** Uses the `pcan` backend on Windows and the `socketcan` backend on Linux.
+        *   **Kvaser:** Uses the `kvaser` backend (via Kvaser's CANlib) on both Windows and Linux.
 
 3.  **Improved Error Handling:**
-    * The fatal error message block in `src/can_logger_app/main.py` was enhanced. It now provides specific, actionable troubleshooting advice based on the combination of the selected hardware (`peak` or `kvaser`) and the operating system, making it easier for users to diagnose connection issues (e.g., missing drivers, incorrect permissions, or network interface status).
+    *   The fatal error message block in `src/can_logger_app/main.py` was enhanced. It now provides specific, actionable troubleshooting advice based on the combination of the selected hardware (`peak` or `kvaser`) and the operating system, making it easier for users to diagnose connection issues (e.g., missing drivers, incorrect permissions, or network interface status).
 
 ### Part 8: Bugfix - Unnecessary Hardware Check in Playback Mode
 
@@ -225,8 +225,8 @@ A comprehensive refactoring of the logging system was performed:
 1.  **Centralized Logger:** `src/radar_tracker/console_logger.py` was simplified to define a single, application-wide logger instance. All other modules (`data_adapter.py`, `tracker.py`, `update_and_save_history.py`) were modified to import and use this shared logger instance.
 2.  **Corrected Log Level:** The centralized logger was set to `logging.DEBUG` to ensure all diagnostic messages are captured.
 3.  **Centralized File I/O:** All file-writing responsibility was moved to `main.py`. 
-    - It now creates a `FileHandler` to save a plain text `console_log.txt` to the correct timestamped directory.
-    - The shutdown sequence in `main.py` was fixed to reliably save the in-memory JSON logs to `console_log.json` in the timestamped directory, resolving the indentation error and race condition.
+    -   It now creates a `FileHandler` to save a plain text `console_log.txt` to the correct timestamped directory.
+    -   The shutdown sequence in `main.py` was fixed to reliably save the in-memory JSON logs to `console_log.json` in the timestamped directory, resolving the indentation error and race condition.
 4.  **Consistent Logger Usage in `main_live.py`:** The `src/radar_tracker/main_live.py` module was updated to import and use the centralized `logger` instance from `console_logger.py` instead of the standard `logging` module. This ensures that all messages (including `[INTERPOLATION]` debug messages) from the live radar processing are correctly routed through the application's logging infrastructure and appear in the console and log files.
 5.  **Consistent Logging Helper Functions:** The `log_debug` and `log_component_debug` functions in `console_logger.py` were updated to use `logger.debug()` instead of `logger.info()`. This makes their behavior consistent with their names and the new `DEBUG` logging level, improving code clarity and maintainability.
 
@@ -266,11 +266,11 @@ To provide users with the flexibility to run the live tracking application using
 
 #### The Implementation
 1.  **Modified `main.py`:**
-    * The CAN interface selection prompt was updated to include a "No CAN" option.
-    * If the user selects this option, the `can_logger_process` is not started.
-    * The `main_live` function is called with `None` for the `shared_live_can_data` and `can_logger_ready` arguments.
+    *   The CAN interface selection prompt was updated to include a "No CAN" option.
+    *   If the user selects this option, the `can_logger_process` is not started.
+    *   The `main_live` function is called with `None` for the `shared_live_can_data` and `can_logger_ready` arguments.
 2.  **No Changes to `radar_tracker`:**
-    * The `RadarWorker` in `src/radar_tracker/main_live.py` was already designed to handle cases where CAN data is not available. If the `shared_live_can_data` object is `None`, it simply skips the CAN interpolation step, and the vehicle's ego-motion (`egoVx`) defaults to zero. This existing robustness meant no further changes were needed in the radar tracker itself.
+    *   The `RadarWorker` in `src/radar_tracker/main_live.py` was already designed to handle cases where CAN data is not available. If the `shared_live_can_data` object is `None`, it simply skips the CAN interpolation step, and the vehicle's ego-motion (`egoVx`) defaults to zero. This existing robustness meant no further changes were needed in the radar tracker itself.
 
 ### Part 15: Bugfix - Torque Data Corruption and Algorithm Integration
 
@@ -295,4 +295,21 @@ To fully implement the vehicle dynamics model by piping the `EstimatedGrade_Est_
 #### The Implementation
 1.  **`src/radar_tracker/data_adapter.py`:** The `FHistFrame` class was updated to include `self.EstimatedGrade_Est_Deg = np.nan`. The `adapt_frame_data_to_fhist` function now populates this attribute from the `can_signals` dictionary.
 2.  **`src/radar_tracker/tracking/tracker.py`:** The `process_frame` method now reads the grade from the frame object (`can_grade = current_frame.EstimatedGrade_Est_Deg`) and passes it to the `estimate_ego_motion` function.
-3.  **`src/radar_tracker/tracking/export_to_json.py`:** The `create_visualization_data`
+3.  **`src/radar_tracker/tracking/export_to_json.py`:** The `create_visualization_data` function was updated to map the `EstimatedGrade_Est_Deg` attribute to the `roadGrade_Deg` field in the final JSON.
+
+### Part 17: Bugfix - CAN Data Corruption and Null Acceleration
+
+#### The Problem
+A persistent and multifaceted bug was causing two main issues in the final `track_history.json` output:
+1.  **Data Corruption:** CAN signal values (e.g., `canVehSpeed_kmph`, `shaftTorque_Nm`) were appearing as massive, incorrect negative numbers.
+2.  **Null Acceleration:** The `estimatedAcceleration_mps2` field was always `null`.
+
+#### The Diagnosis
+A deep dive into the data pipeline revealed two distinct root causes:
+1.  **Data Corruption:** The previous fix (Part 15) had corrected the data type for the CAN signal's *value* (`physical_value`) but not its *timestamp*. The `msg.timestamp`, which was a `numpy.float64`, was still being corrupted by the `multiprocessing.Manager.dict` when the data was passed from the `can_logger_app` to the `radar_tracker` process.
+2.  **Null Acceleration:** The `estimate_ego_motion` function was calculating the vehicle's acceleration and using it as an *input* to its internal Extended Kalman Filter (EKF). However, the function was returning this initial input value instead of the final, corrected acceleration value from the EKF's updated state. This meant the logged value did not reflect the result of the filtering process.
+
+#### The Solution
+A two-part fix was implemented to resolve both issues:
+1.  **Fix Data Corruption:** In `src/can_logger_app/data_processor.py`, the fix was extended. Now, both the CAN signal's `physical_value` and its `msg.timestamp` are explicitly cast to a native Python `float()` before being placed in the shared dictionary. This completely eliminates the data type mismatch and prevents inter-process corruption for all CAN signals.
+2.  **Fix Null Acceleration:** In `src/radar_tracker/tracking/algorithms/estimate_ego_motion.py`, the function's return statement was modified. It now returns the final, corrected acceleration value (`updated_kf_state['x'][2, 0]`) from the EKF's state, rather than the initial input value. This ensures the most accurate estimate for acceleration is propagated to the `tracker` and saved in the final log.

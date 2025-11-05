@@ -143,8 +143,11 @@ def estimate_ego_motion(
     # --- 7. Package updated state and results ---
     updated_kf_state = {'x': x_corr, 'P': P_corr, 'Q': ego_kf_state['Q']}
     
+    # --- FIX: The acceleration to be logged is the final, corrected state ---
+    final_ax = updated_kf_state['x'][2, 0]
+
     if config.COMPONENT_DEBUG_FLAGS.get('ransac'):
         logging.debug(f"[RANSAC_EST] EKF Corrected State (x_corr): {x_corr.flatten()}")
 
     return (updated_kf_state, filtered_vx_ego_iir, filtered_vy_ego_iir, 
-            ransac_vx, ransac_vy, ego_inlier_ratio, ax_dynamics, outlier_indices)
+            ransac_vx, ransac_vy, ego_inlier_ratio, final_ax, outlier_indices)

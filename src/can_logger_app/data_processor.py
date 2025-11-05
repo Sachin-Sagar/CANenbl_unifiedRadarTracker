@@ -62,7 +62,8 @@ def processing_worker(worker_id, decoding_rules, raw_queue, index_queue, shared_
                         # We use a deque (via list slicing) to store the last 10 values
                         # This mimics the buffer from the old LiveCANManager
                         current_buffer = live_data_dict.get(name, [])
-                        current_buffer.append((msg.timestamp, physical_value))
+                        # --- FIX: Also cast the timestamp to a native float ---
+                        current_buffer.append((float(msg.timestamp), physical_value))
                         # Keep only the last 10 items
                         live_data_dict[name] = current_buffer[-10:]
 
