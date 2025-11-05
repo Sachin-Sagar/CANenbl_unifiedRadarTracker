@@ -44,15 +44,15 @@ ENABLE_CONSOLE_LOGGING = True
 DEBUG_FLAGS = {
     # Logs the raw shared CAN data and the result of the interpolation
     # in src/radar_tracker/main_live.py
-    'log_can_interpolation': True,
+    'log_can_interpolation': False,
 
     # Logs the CAN data as it is being adapted into the FHistFrame
     # in src/radar_tracker/data_adapter.py
-    'log_can_data_adapter': True,
+    'log_can_data_adapter': False,
 
     # Logs the egoVx value at the entry point of the main tracker algorithm
     # in src/radar_tracker/tracking/tracker.py
-    'log_tracker_entry': True,
+    'log_tracker_entry': False,
 
     # Logs the egoVx value from the final history before it's saved to JSON
     # in src/radar_tracker/tracking/update_and_save_history.py

@@ -44,7 +44,10 @@ def processing_worker(worker_id, decoding_rules, raw_queue, index_queue, shared_
                         if raw_value & (1 << (length - 1)):
                             raw_value -= (1 << length)
 
-                    physical_value = (raw_value * scale) + offset
+                    # --- THIS IS THE FIX ---
+                    # Explicitly cast to a native Python float to prevent
+                    # data corruption when passing to the Manager.dict.
+                    physical_value = float((raw_value * scale) + offset)
                     
                     # --- 1. Log to file (existing logic) ---
                     mem_offset = (current_slot % num_slots) * LOG_ENTRY_FORMAT.size

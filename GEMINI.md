@@ -78,7 +78,6 @@ After fixing the hardware conflict, the `QObject` error *still* persisted.
 * **Cause:** This `print` statement was in the global scope of `src/radar_tracker/hardware/parsing_utils.py`. On Windows, `multiprocessing` re-imports all scripts for each new worker process, causing the `print` to re-run.
 * **Solution:** Removed the `print` statements from the global scope of `parsing_utils.py`.
 
-
 ### Part 6: Integrating CAN Data into Radar Tracker
 
 #### The Problem Identified
@@ -122,17 +121,17 @@ Previously, the application automatically selected the CAN interface based on th
 #### The Implementation
 
 1.  **Interactive Prompt:**
-    *   The OS-based detection in `src/can_logger_app/config.py` was removed entirely.
-    *   An interactive prompt was added to the main entrypoint (`main.py`). When starting in Live Mode, the application now asks the user to select between `PEAK (pcan)` or `Kvaser`.
+    * The OS-based detection in `src/can_logger_app/config.py` was removed entirely.
+    * An interactive prompt was added to the main entrypoint (`main.py`). When starting in Live Mode, the application now asks the user to select between `PEAK (pcan)` or `Kvaser`.
 
 2.  **Dynamic Configuration:**
-    *   The user's choice is passed as an argument from the main process to the `can_logger_app` process.
-    *   Inside `src/can_logger_app/main.py`, this choice is used to dynamically construct the `bus_params` dictionary with the correct `interface` and `channel` for the selected hardware and host OS.
-        *   **PEAK:** Uses the `pcan` backend on Windows and the `socketcan` backend on Linux.
-        *   **Kvaser:** Uses the `kvaser` backend (via Kvaser's CANlib) on both Windows and Linux.
+    * The user's choice is passed as an argument from the main process to the `can_logger_app` process.
+    * Inside `src/can_logger_app/main.py`, this choice is used to dynamically construct the `bus_params` dictionary with the correct `interface` and `channel` for the selected hardware and host OS.
+        * **PEAK:** Uses the `pcan` backend on Windows and the `socketcan` backend on Linux.
+        * **Kvaser:** Uses the `kvaser` backend (via Kvaser's CANlib) on both Windows and Linux.
 
 3.  **Improved Error Handling:**
-    *   The fatal error message block in `src/can_logger_app/main.py` was enhanced. It now provides specific, actionable troubleshooting advice based on the combination of the selected hardware (`peak` or `kvaser`) and the operating system, making it easier for users to diagnose connection issues (e.g., missing drivers, incorrect permissions, or network interface status).
+    * The fatal error message block in `src/can_logger_app/main.py` was enhanced. It now provides specific, actionable troubleshooting advice based on the combination of the selected hardware (`peak` or `kvaser`) and the operating system, making it easier for users to diagnose connection issues (e.g., missing drivers, incorrect permissions, or network interface status).
 
 ### Part 8: Bugfix - Unnecessary Hardware Check in Playback Mode
 
@@ -153,9 +152,8 @@ The hardware check was refactored and moved out of the global scope.
 #### The Problem
 When selecting the `Kvaser` interface on a Linux system, the application fails to initialize the CAN logger and crashes. The console shows a `NameError` originating from the `python-can` library's Kvaser backend.
 
-```
 NameError: name 'canGetNumberOfChannels' is not defined
-```
+
 
 This prevents the application from running with Kvaser hardware on Linux, even if the official Kvaser drivers and `canlib` are installed.
 
@@ -268,8 +266,33 @@ To provide users with the flexibility to run the live tracking application using
 
 #### The Implementation
 1.  **Modified `main.py`:**
-    *   The CAN interface selection prompt was updated to include a "No CAN" option.
-    *   If the user selects this option, the `can_logger_process` is not started.
-    *   The `main_live` function is called with `None` for the `shared_live_can_data` and `can_logger_ready` arguments.
+    * The CAN interface selection prompt was updated to include a "No CAN" option.
+    * If the user selects this option, the `can_logger_process` is not started.
+    * The `main_live` function is called with `None` for the `shared_live_can_data` and `can_logger_ready` arguments.
 2.  **No Changes to `radar_tracker`:**
-    *   The `RadarWorker` in `src/radar_tracker/main_live.py` was already designed to handle cases where CAN data is not available. If the `shared_live_can_data` object is `None`, it simply skips the CAN interpolation step, and the vehicle's ego-motion (`egoVx`) defaults to zero. This existing robustness meant no further changes were needed in the radar tracker itself.
+    * The `RadarWorker` in `src/radar_tracker/main_live.py` was already designed to handle cases where CAN data is not available. If the `shared_live_can_data` object is `None`, it simply skips the CAN interpolation step, and the vehicle's ego-motion (`egoVx`) defaults to zero. This existing robustness meant no further changes were needed in the radar tracker itself.
+
+### Part 15: Bugfix - Torque Data Corruption and Algorithm Integration
+
+#### The Problem
+A critical bug was identified where the `ETS_MOT_ShaftTorque_Est_Nm` signal was being corrupted when passed from the `can_logger_app` process to the `radar_tracker` process. A value like `9.36` would appear as `-303728010253.7477`. Furthermore, even if the value were correct, the tracking algorithm was hardcoded to ignore it and use `np.nan` instead. The resulting calculated acceleration was also not being saved.
+
+#### The Diagnosis
+1.  **Data Corruption:** The `can_logger_app/data_processor.py` was calculating the `physical_value` as a `numpy.float64`. This non-standard type was being corrupted by the `multiprocessing.Manager.dict` when sent between processes.
+2.  **Algorithm Usage:** `src/radar_tracker/tracking/tracker.py` was ignoring the CAN torque value from the `current_frame` and hardcoding `can_torque = np.nan`, which was then passed to the ego-motion estimator.
+3.  **Data Logging:** The `tracker.py` file never saved the `ax_dynamics` (calculated acceleration) back to the `current_frame`, so it was always `null` in the final `track_history.json`.
+
+#### The Solution (A 3-part fix)
+1.  **Fix Corruption:** In `src/can_logger_app/data_processor.py`, the `physical_value` is now explicitly cast to a native Python `float()` using `physical_value = float(...)` before being put into the shared dictionary. This prevents the multiprocessing corruption.
+2.  **Fix Usage:** In `src/radar_tracker/tracking/tracker.py`, the hardcoded `can_torque = np.nan` and `can_gear = np.nan` lines were removed. The code now correctly reads these values from the `current_frame` object: `can_torque = current_frame.ETS_MOT_ShaftTorque_Est_Nm`.
+3.  **Fix Logging:** In `src/radar_tracker/tracking/tracker.py`, a new line was added after the `estimate_ego_motion` call to save the result: `current_frame.estimatedAcceleration_mps2 = ax_dynamics`. Finally, `src/radar_tracker/tracking/export_to_json.py` was updated to map the correct attribute names (e.g., `ETS_MOT_ShaftTorque_Est_Nm`) to the final JSON fields (e.g., `shaftTorque_Nm`).
+
+### Part 16: Feature Add - Road Grade Integration
+
+#### The Goal
+To fully implement the vehicle dynamics model by piping the `EstimatedGrade_Est_Deg` signal from the CAN bus all the way to the ego-motion estimator and into the final JSON log.
+
+#### The Implementation
+1.  **`src/radar_tracker/data_adapter.py`:** The `FHistFrame` class was updated to include `self.EstimatedGrade_Est_Deg = np.nan`. The `adapt_frame_data_to_fhist` function now populates this attribute from the `can_signals` dictionary.
+2.  **`src/radar_tracker/tracking/tracker.py`:** The `process_frame` method now reads the grade from the frame object (`can_grade = current_frame.EstimatedGrade_Est_Deg`) and passes it to the `estimate_ego_motion` function.
+3.  **`src/radar_tracker/tracking/export_to_json.py`:** The `create_visualization_data`

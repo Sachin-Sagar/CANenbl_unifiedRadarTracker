@@ -58,7 +58,17 @@ class RadarTracker:
         # --- CAN and IMU data is now part of current_frame ---
         # Default values are used if not provided by the adapter.
         can_speed = current_frame.correctedEgoSpeed_mps * 3.6 # Convert m/s back to km/h for the function
-        can_torque, can_gear, can_grade = np.nan, np.nan, 0.0
+        
+        # --- THIS IS THE FIX (PART 1) ---
+        # Read live CAN data from the frame object instead of using np.nan
+        can_torque = current_frame.ETS_MOT_ShaftTorque_Est_Nm
+        can_gear = current_frame.ETS_VCU_Gear_Engaged_St_enum
+        
+        # --- THIS IS THE STEP 4 FIX ---
+        # Read the road grade from the frame object
+        can_grade = current_frame.EstimatedGrade_Est_Deg
+        # --- END OF STEP 4 FIX ---
+
         imu_ax, imu_ay, imu_omega = 0.0, 0.0, 0.0
         
         cartesian_pos_data = current_frame.posLocal
@@ -86,6 +96,11 @@ class RadarTracker:
              self.params['vehicle_params'], self.params['ego_motion_params'], self.original_ego_kf_r
          )
         
+        # --- THIS IS THE FIX (PART 2) ---
+        # Save the calculated acceleration back to the frame for logging.
+        current_frame.estimatedAcceleration_mps2 = ax_dynamics
+        # --- END OF FIX (PART 2) ---
+
         if outlier_indices.size > 0: current_frame.isOutlier[outlier_indices] = True
         # The egoVx value is now populated from the CAN signal in the data_adapter.
         # The ego-motion estimator uses the CAN speed as a primary input, but we

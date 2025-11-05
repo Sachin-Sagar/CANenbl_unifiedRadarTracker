@@ -58,6 +58,11 @@ def create_visualization_data(all_tracks, fhist, params):
             except (ValueError, TypeError):
                 gear_val = None # Handle cases where it might be a non-numeric string
         
+        # --- THIS IS THE FIX ---
+        # The dictionary keys ('canVehSpeed_kmph', 'shaftTorque_Nm', etc.) are the 
+        # final JSON field names.
+        # The values (get_attr_safe(...)) now read from the correct FHistFrame attributes
+        # that you populated in the data_adapter.
         frame_dict = {
             'timestamp': get_attr_safe(frame_data, 'timestamp'), 'frameIdx': i,
             'motionState': get_attr_safe(frame_data, 'motionState'),
@@ -65,12 +70,18 @@ def create_visualization_data(all_tracks, fhist, params):
             'canVehSpeed_kmph': get_attr_safe(frame_data, 'ETS_VCU_VehSpeed_Act_kmph'),
             'correctedEgoSpeed_mps': get_attr_safe(frame_data, 'correctedEgoSpeed_mps'),
             'shaftTorque_Nm': get_attr_safe(frame_data, 'ETS_MOT_ShaftTorque_Est_Nm'),
-            'engagedGear': gear_val, # Use the safely converted value
+            'engagedGear': gear_val,
+            
+            # --- ADDED FOR STEP 4 ---
+            'roadGrade_Deg': get_attr_safe(frame_data, 'EstimatedGrade_Est_Deg'),
+            # --- END OF STEP 4 FIX ---
+            
             'estimatedAcceleration_mps2': get_attr_safe(frame_data, 'estimatedAcceleration_mps2'),
             'iirFilteredVx_ransac': get_attr_safe(frame_data, 'iirFilteredVx_ransac'),
             'iirFilteredVy_ransac': get_attr_safe(frame_data, 'iirFilteredVy_ransac'),
             'clusters': [], 'pointCloud': []
         }
+        # --- END OF FIX ---
         
         filtered_barrier = get_attr_safe(frame_data, 'filtered_barrier_x')
         if filtered_barrier is not None and hasattr(filtered_barrier, 'left') and hasattr(filtered_barrier, 'right'):

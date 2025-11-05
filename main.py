@@ -42,7 +42,7 @@ if __name__ == '__main__':
     file_handler = logging.FileHandler(log_file_path, mode='w')
     file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     logging.getLogger().addHandler(file_handler)
-    logging.getLogger().setLevel(logging.INFO) # Change to logging.WARNING or logging.ERROR for less verbosity
+    logging.getLogger().setLevel(logging.DEBUG) # Change to logging.WARNING or logging.ERROR for less verbosity
 
 
 

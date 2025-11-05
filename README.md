@@ -2,7 +2,7 @@
 
 ## 1. Project Overview
 
-This project is a real-time radar tracking application enhanced with live CAN bus data. It interfaces with a radar sensor, processes the incoming data through an advanced tracking pipeline, and fuses it with real-time vehicle data (like speed) read from a CAN bus. This provides a more accurate and context-aware tracking solution.
+This project is a real-time radar tracking application enhanced with live CAN bus data. It interfaces with a radar sensor, processes the incoming data through an advanced tracking pipeline, and fuses it with real-time vehicle data (like speed, torque, and gear) read from a CAN bus. This provides a more accurate and context-aware tracking solution.
 
 The application can be run in two modes:
 
@@ -24,13 +24,10 @@ The application can be run in two modes:
 * **Simultaneous Logging & Live-Share:** A single CAN process both logs all decoded signals to a `can_log.json` file and shares the latest signal values to the live radar tracker via a shared memory dictionary.
 * **DBC-Based Decoding:** Uses an industry-standard `.dbc` file to decode raw CAN messages into physical values.
 * **Multi-Interface Support:** Supports both PEAK (PCAN) and Kvaser hardware. The application prompts the user to choose an interface at startup and dynamically configures the correct backend (`pcan`, `socketcan`, or `kvaser`) for the host OS (Windows/Linux).
-*   **Real-time Fusion:** The CAN data is interpolated, synchronized with the radar frames, and integrated directly into the `FHistFrame` object to provide the tracker with the vehicle's state (e.g., speed) at the exact moment of the radar measurement.
-*   **Race Condition Fix for Live CAN Data:** Resolved a race condition where the radar tracker would start processing frames before live CAN data was available, leading to `egoVx` (ego vehicle speed) being consistently zero. A `multiprocessing.Event` is now used to synchronize the CAN logger and radar tracker, ensuring the tracker waits for the first CAN message to be processed before beginning its main loop.
-
-### General
-
-* **Comprehensive Data Logging:** Saves raw radar data, processed track history, decoded CAN logs, and console output for post-processing and debugging.
-* **Modular Architecture:** The radar processing, CAN handling, and GUI are separated into distinct modules for better maintainability.
+* **Real-time Fusion:** The CAN data is interpolated, synchronized with the radar frames, and integrated directly into the `FHistFrame` object to provide the tracker with the vehicle's state.
+* **Race Condition Fix for Live CAN Data:** A `multiprocessing.Event` is used to synchronize the CAN logger and radar tracker, ensuring the tracker waits for the first CAN message to be processed before beginning its main loop.
+* **Robust Data Integrity:** Solved a critical data corruption bug by ensuring all CAN signals (like torque) are cast to native Python `float` types before being shared between processes, preventing pickling errors.
+* **Vehicle Dynamics Model:** The tracker's ego-motion estimator now correctly uses live CAN data (torque, gear, and road grade) to calculate the vehicle's longitudinal acceleration, providing a more accurate physics-based state prediction.
 
 ## 3. System Architecture (Live Mode)
 
@@ -42,7 +39,7 @@ The application consists of three main components running in parallel to ensure 
     * The `RadarWorker` configures and reads from the **radar** sensor.
     * It reads the latest CAN data from a `Manager.dict()` (shared memory).
     * It interpolates the CAN data to match the radar timestamp.
-    * **NEW:** It integrates the interpolated CAN data (e.g., vehicle speed) directly into the `FHistFrame` object, which is then passed to the core `RadarTracker` algorithm.
+    * It integrates the interpolated CAN data (e.g., vehicle speed, torque) directly into the `FHistFrame` object, which is then passed to the core `RadarTracker` algorithm.
 
 2.  **CAN Process (Multiprocessing `Process`):**
     * A single, separate process that has exclusive control of the **CAN hardware**.
@@ -54,58 +51,13 @@ The application consists of three main components running in parallel to ensure 
 
 This architecture solves the Windows-specific hardware and threading conflicts by ensuring only one process accesses the CAN bus, and that the `can.Bus` object is created, used, and destroyed all within the same thread.
 
-## 5. Hardware Setup and Recommendations
-
-For the best experience in **Live Mode**, please follow these hardware recommendations.
-
-### Recommended Hardware
-
-*   **On Linux (including Raspberry Pi):**
-    *   **Hardware:** **PCAN-USB Adapter**.
-    *   **Interface:** **SocketCAN**.
-    *   **Reasoning:** The `socketcan` interface is natively supported by the Linux kernel, making it extremely stable and reliable. The necessary drivers are typically pre-installed. When the application prompts for an interface, choose **PEAK (pcan)**, and it will automatically use the `socketcan` backend.
-
-*   **On Windows:**
-    *   **Hardware:** **PCAN-USB Adapter** or **Kvaser CAN Adapter**.
-    *   **Interface:** **PCAN-Basic** or **Kvaser CANlib**.
-    *   **Reasoning:** Both PCAN and Kvaser are fully supported on Windows. Ensure you have the correct drivers installed for your chosen device.
-
-### Kvaser Hardware Support
-
-*   **Windows:** Kvaser hardware is fully supported on Windows. The application's architecture has been specifically designed to handle the driver interactions correctly.
-
-*   **Linux (Use With Caution):** Using Kvaser on Linux is **not recommended**. There is a known, recurring incompatibility between `python-can` and Kvaser's proprietary Linux drivers (`canlib`). This can lead to runtime crashes (e.g., `NameError: name 'canGetNumberOfChannels' is not defined`), even if the drivers appear to be installed correctly. For Linux, a PCAN adapter using the native `socketcan` interface is the most reliable option.
-
-For details on installing drivers, see the **Installation and Setup** section.
-
-## 6. Data Logging
+## 4. Installation and Setup
 
 ### Prerequisites
 
-*   Python 3.10 or newer.
-
-**Note:** The following hardware and drivers are only required for **Live Mode**.
-
-*   **Radar Hardware:** A compatible radar sensor.
-*   **CAN Hardware:** A PCAN-USB or Kvaser adapter is recommended.
-*   **Drivers (Windows):** Install the appropriate drivers for your CAN hardware (e.g., [PCAN-Basic](https://www.peak-system.com/PCAN-Basic.239.0.html?&L=1) or Kvaser drivers).
-*   **Drivers (Linux):** For PEAK hardware, install `can-utils`:
-    ```bash
-    sudo apt update
-    sudo apt install can-utils
-    ```
-
-### Raspberry Pi Specifics
-
-For Raspberry Pi deployments, the application includes GPIO-based controls:
-
-* **Start Switch:** Connect a physical switch between **GPIO 17** (as defined by `BUTTON_PIN` in `config.py`) and a ground pin. The application will wait for this switch to be turned **ON** to begin execution.
-* **Onboard LED Feedback:** The Raspberry Pi's onboard activity LED (`led0`) is used for status indications:
-    * The LED stays **continuously ON** to indicate successful application startup and that logging has commenced.
-    * The LED turns **OFF** upon shutdown to confirm that the application has received a shutdown signal and is terminating cleanly.
-* **Switch-OFF Shutdown:** Turning the start switch **OFF** will trigger a graceful shutdown of the application.
-
-**Note:** Controlling the onboard LED and accessing GPIO pins requires the `RPi.GPIO` library (automatically installed with project dependencies) and running the script with `sudo` privileges.
+* Python 3.10 or newer.
+* **Radar Hardware:** A compatible radar sensor (for Live Mode).
+* **CAN Hardware:** A PCAN-USB or Kvaser adapter (for Live Mode).
 
 ### Package Management
 
@@ -120,7 +72,7 @@ uv venv
 # Activate the environment
 source .venv/bin/activate
 
-# Install dependencies
+# Install dependencies (from uv.lock if present, or requirements.txt)
 uv pip install -r requirements.txt
 Using pip:
 
@@ -137,53 +89,101 @@ source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
-### CAN Configuration
+Driver Installation
+Windows: Install the appropriate drivers for your CAN hardware (e.g., PCAN-Basic or Kvaser drivers).
 
-*   **Hardware Selection (Interactive):** In Live Mode, the application will first prompt you to select your CAN hardware: `PEAK (pcan)`, `Kvaser`, or `No CAN`. The correct `python-can` backend is then configured automatically based on your choice and operating system. Selecting `No CAN` will bypass all CAN initialization and run the radar tracker independently.
-*   **DBC File:** Place your CAN database file (e.g., `VCU.dbc`) in the `input/` directory.
-*   **Signal List:** The list of signals to be logged and used by the tracker is defined in `input/master_sigList.txt`.
+Linux (for PEAK/SocketCAN): Install can-utils and ensure the peak_usb kernel module is loaded.
 
-### Linux Specifics
+Bash
 
-If you are using a PEAK (PCAN) adapter on Linux, the application uses the `socketcan` backend. You must bring the interface up manually before running the script:
+sudo apt update
+sudo apt install can-utils
+Before running the application, you must bring the interface up:
 
-```bash
+Bash
+
 # Replace can0 if your interface has a different name
 sudo ip link set can0 up type can bitrate 500000
-```
+5. Hardware & CAN Configuration
+Hardware Recommendations
+On Linux (including Raspberry Pi):
 
-## 6. Data Logging
+Hardware: PCAN-USB Adapter.
 
+Interface: SocketCAN.
+
+Reasoning: The socketcan interface is natively supported by the Linux kernel, making it extremely stable and reliable. When the application prompts for an interface, choose PEAK (pcan), and it will automatically use the socketcan backend.
+
+On Windows:
+
+Hardware: PCAN-USB Adapter or Kvaser CAN Adapter.
+
+Interface: PCAN-Basic or Kvaser CANlib.
+
+Reasoning: Both PCAN and Kvaser are fully supported on Windows.
+
+Kvaser Hardware Support
+Windows: Kvaser hardware is fully supported.
+
+Linux (Use With Caution): Using Kvaser on Linux is not recommended. There is a known incompatibility between python-can and Kvaser's proprietary Linux drivers (canlib) that can lead to runtime crashes.
+
+CAN Configuration
+Hardware Selection (Interactive): In Live Mode, the application will first prompt you to select your CAN hardware: PEAK (pcan), Kvaser, or No CAN. The correct python-can backend is then configured automatically. Selecting No CAN will bypass all CAN initialization.
+
+DBC File: Place your CAN database file (e.g., VCU.dbc) in the input/ directory.
+
+Signal List: Define the signals to be logged and used by the tracker in input/master_sigList.txt.
+
+Raspberry Pi Specifics
+Start Switch: Connect a physical switch between GPIO 17 and a ground pin. The application will wait for this switch to be turned ON to begin execution.
+
+Onboard LED Feedback: The Raspberry Pi's onboard activity LED (led0) is used for status:
+
+Solid ON: Application is running and logging.
+
+OFF: Application is shut down.
+
+Switch-OFF Shutdown: Turning the start switch OFF will trigger a graceful shutdown.
+
+Note: This functionality requires RPi.GPIO and sudo privileges.
+
+6. Data Logging
 All output data from a single session is saved into a unique, timestamped directory to prevent overwriting and to keep logs organized.
 
-*   **Output Directory:** `output/YYYYMMDD_HHMMSS/`
-*   **CAN Log:** `can_log_YYYY-MM-DD_HH-MM-SS.json` - A JSON Lines file containing all decoded CAN signals.
-*   **Radar Log:** `radar_log.json` - A log of the raw data frames from the radar sensor.
-*   **Track History:** `track_history.json` - The final, processed tracking data.
-*   **Console Log:** `console_log.json` - A JSON file containing all the console output from the application, useful for debugging.
+Output Directory: output/YYYYMMDD_HHMMSS/
 
-Upon shutdown, the CAN logger will print a **Data Logging Summary** to the console. This report details which signals from the monitoring list were successfully logged and which (if any) were never seen on the bus. This is useful for verifying that the CAN interface is working as expected.
+CAN Log: can_log_YYYY-MM-DD_HH-MM-SS.json - A JSON Lines file containing all decoded CAN signals.
 
-## 7. Usage
+Radar Log: radar_log.json - A log of the raw data frames from the radar sensor.
 
-1.  **Activate your virtual environment:**
-    ```bash
-    source .venv/bin/activate
-    ```
+Track History: track_history.json - The final, processed tracking data, including fused CAN signals.
 
-2.  **Run the application:**
-    ```bash
-    python main.py
-    ```
+Console Log: console_log.json / console_log.txt - Logs of the console output for debugging.
 
-3.  **Select Mode:** The script will first prompt you to choose between `(1) Live Tracking` or `(2) Playback from File`.
+Upon shutdown, the CAN logger will print a Data Logging Summary to the console. This report details which signals from the monitoring list were successfully logged and which (if any) were never seen on the bus.
 
-4.  **Select CAN Interface (Live Mode Only):** If you selected Live Tracking, you will then be prompted to choose your CAN hardware.
+7. Usage
+Activate your virtual environment:
 
-*   **On Raspberry Pi (Live Mode):** After the initial prompts, the application will wait for the physical switch (connected to GPIO 17) to be turned **ON** to start the radar tracking and CAN logging. To stop the application, turn the switch **OFF**.
-*   **On Windows/other systems (Live Mode):** The application will start immediately after mode selection. To stop the application, close the visualization window or press `Ctrl+C` in the console.
+Bash
 
-In all cases, the application is designed to shut down gracefully. This ensures that all data is saved correctly and that a final diagnostic report for the CAN logger is printed to the console.
+source .venv/bin/activate
+Run the application (with sudo if on RPi for GPIOs):
+
+Bash
+
+# On RPi:
+sudo python main.py
+
+# On Windows/PC:
+python main.py
+Select Mode: Choose between (1) Live Tracking or (2) Playback from File.
+
+Select CAN Interface (Live Mode Only): If you selected Live Tracking, you will then be prompted to choose your CAN hardware.
+
+On Raspberry Pi (Live Mode): The application will wait for the physical switch to be turned ON to start. To stop, turn the switch OFF.
+
+On Windows/other systems (Live Mode): The application will start immediately. To stop, close the visualization window or press Ctrl+C in the console.
 
 8. Testing
 A unit test is available to perform a sanity check on the CAN service integration. This test mocks the CAN hardware and can be run without any connected devices.
