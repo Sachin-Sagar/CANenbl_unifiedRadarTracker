@@ -11,6 +11,7 @@ from .algorithms.estimate_ego_motion import estimate_ego_motion
 from .algorithms.classify_vehicle_motion import classify_vehicle_motion
 from .algorithms.detect_side_barrier import detect_side_barrier
 from .algorithms.my_dbscan import my_dbscan
+from .algorithms.detect_and_filter_reflections import detect_and_filter_reflections # <--- ADDED
 from .utils.slot_points_to_grid import slot_points_to_grid
 
 class RadarTracker:
@@ -188,12 +189,33 @@ class RadarTracker:
                         'vx': mean_radial_speed * np.sin(azimuth_rad), 
                         'vy': mean_radial_speed * np.cos(azimuth_rad),
                         'isOutlierCluster': is_moving_cluster, # This flag now correctly represents motion
-                        'isStationary_inBox': is_stationary_in_box_flag
+                        'isStationary_inBox': is_stationary_in_box_flag,
+                        'originalClusterID': cid # <--- Ensure originalClusterID is added
                     })
 
                 if temp_centroids:
                     detected_centroids = np.array(temp_centroids)
                     detected_cluster_info = temp_cluster_info
+
+            # --- ADD THIS BLOCK START ---
+            if detected_centroids.shape[0] > 0:
+                cluster_ids_to_remove = detect_and_filter_reflections(
+                    grid_map,
+                    detected_cluster_info,
+                    dbscan_clusters, # Pass the full cluster list
+                    point_cloud,     # Pass the full point cloud
+                    self.params['dbscan_params']['epsilon_vel'] # You can use a dedicated param later
+                )
+    
+                if cluster_ids_to_remove:
+                    logger.debug(f"[TRACKER_CORE] Reflection filter removing {len(cluster_ids_to_remove)} clusters.")
+                    keep_indices = [
+                        i for i, info in enumerate(detected_cluster_info)
+                        if info['originalClusterID'] not in cluster_ids_to_remove
+                    ]
+                    detected_centroids = detected_centroids[keep_indices]
+                    detected_cluster_info = [detected_cluster_info[i] for i in keep_indices]
+            # --- ADD THIS BLOCK END ---
 
         current_frame.detectedClusterInfo = np.array(detected_cluster_info, dtype=object) if detected_cluster_info else np.array([])
         
