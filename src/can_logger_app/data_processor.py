@@ -5,7 +5,7 @@ import time
 import struct
 import queue
 
-from . import config
+from can_logger_app import config
 
 import logging
 
@@ -56,7 +56,7 @@ def processing_worker(worker_id, decoding_rules, raw_queue, results_queue, perf_
                         "signal": name,
                         "value": physical_value
                     }
-                    if config.DEBUG_LOGGING:
+                    if config.DEBUG_PRINTING:
                         logger.debug(f"[WORKER {worker_id}] Queueing: {log_entry}")
                     results_queue.put(log_entry)
                     

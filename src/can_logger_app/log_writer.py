@@ -5,7 +5,7 @@ import queue
 import json
 import time
 import struct
-from . import config
+from can_logger_app import config
 import logging
 
 # Configure a basic logger for this module
@@ -41,7 +41,7 @@ class LogWriter(threading.Thread):
                     try:
                         log_entry = self.log_queue.get(timeout=0.01)
                         
-                        if config.DEBUG_LOGGING:
+                        if config.DEBUG_PRINTING:
                             logger.debug(f"[LOG WRITER] Dequeued: {log_entry}")
 
                         # The worker now sends a dict to signal its logged signals
@@ -57,7 +57,7 @@ class LogWriter(threading.Thread):
                             "signal": log_entry["signal"],
                             "value": log_entry["value"]
                         }
-                        if config.DEBUG_LOGGING:
+                        if config.DEBUG_PRINTING:
                             logger.debug(f"[LOG WRITER] Writing: {formatted_entry}")
                         write_batch.append(formatted_entry)
 
