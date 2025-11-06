@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.14] - 2025-11-06
+
+### Fixed
+
+- **Inter-Process Communication Deadlock on Non-Linux Systems:** Resolved a critical issue where the radar tracker application would hang indefinitely on non-Linux systems (e.g., Windows) when running in live mode with CAN enabled. The deadlock was caused by an incorrect inter-process communication (IPC) pattern where `main_live` (radar tracker) was launched in a `threading.Thread` while attempting to synchronize with a `multiprocessing.Event` set by a `multiprocessing.Process` (CAN logger). `multiprocessing.Event` objects cannot be reliably shared between `multiprocessing.Process` and `threading.Thread` in this manner.
+    - The fix involved modifying `main.py` to remove the `threading.Thread` wrapper around the `main_live` function call in the non-Linux execution block. `main_live` is now called directly in the main process, ensuring correct sharing and synchronization of the `multiprocessing.Event` (`can_logger_ready`) between the CAN logger process and the main process. This allows the radar tracker to correctly receive the "ready" signal from the CAN logger and proceed with data processing.
+
 ## [1.2.13] - 2025-11-06
 
 ### Fixed

@@ -181,16 +181,9 @@ if __name__ == '__main__':
                     )
                     can_logger_process.start()
                 
-                # Start the main_live function in a separate thread
+                # Call the main_live function directly in the main process
                 # MODIFIED: Pass the shared dict and ready event to the live radar main
-                live_thread = threading.Thread(
-                    target=main_live, 
-                    args=(output_dir, shutdown_flag, shared_live_can_data, effective_can_logger_ready)
-                )
-                live_thread.start()
-                
-                # Wait for the live thread to finish, allowing for Ctrl+C
-                live_thread.join()
+                main_live(output_dir, shutdown_flag, shared_live_can_data, effective_can_logger_ready)
 
             elif mode == '2':
                 logger.info("\nStarting in PLAYBACK mode...")
@@ -201,9 +194,6 @@ if __name__ == '__main__':
         finally:
             shutdown_flag.set() # Signal all processes to shutdown
 
-            if live_thread and live_thread.is_alive():
-                logger.info("Waiting for live tracker to finish...")
-                live_thread.join(timeout=5)
 
             if can_logger_process and can_logger_process.is_alive():
                 logger.info("Signaling CAN logger to shut down gracefully...")

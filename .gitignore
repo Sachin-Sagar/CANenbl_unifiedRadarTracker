@@ -9,8 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
-backup
 input
 .vscode
-sample_console_out
+console_out
 output
+backup
