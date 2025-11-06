@@ -32,6 +32,9 @@ def processing_worker(worker_id, decoding_rules, raw_queue, results_queue, perf_
             if not isinstance(msg, can.Message):
                 continue
             
+            if config.DEBUG_PRINTING:
+                logger.debug(f"[WORKER {worker_id}] Processing raw CAN message: {msg}")
+
             start_time = time.perf_counter()
 
             if msg.arbitration_id in decoding_rules:

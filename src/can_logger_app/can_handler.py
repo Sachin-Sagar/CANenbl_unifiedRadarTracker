@@ -45,6 +45,7 @@ class CANReader(threading.Thread):
                 msg = self.bus.recv(timeout=0.001) # Use a small timeout
                 
                 if msg:
+                    print(f"DEBUG [CANReader]: Received message: {msg}")
                     self.messages_received += 1
                     
                     msg_id_int = msg.arbitration_id

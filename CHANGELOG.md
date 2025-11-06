@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.11] - 2025-11-06
+
+### Fixed
+
+- **`IndentationError` in `src/can_logger_app/main.py`**: Corrected an `IndentationError` that occurred due to incorrect indentation within the `try...finally` block for console output redirection, and removed duplicated code.
+- **CAN Log Data Corruption (Interim Fix)**: Applied an interim fix in `src/can_logger_app/log_writer.py` to explicitly cast the signal `value` to a native Python `float()` before JSON serialization, addressing potential data type corruption.
+
+### Added
+
+- **Comprehensive Console Output Redirection**: Implemented redirection of `sys.stdout` and `sys.stderr` to a timestamped log file in `output/` for `can_logger_app/main.py`, ensuring all console output is captured.
+- **Detailed CAN Message Debugging**: Added debug print statements to `src/can_logger_app/can_handler.py` (logging all received CAN messages) and `src/can_logger_app/data_processor.py` (logging raw CAN messages before decoding) to aid in diagnosing constant CAN signal values.
+
 ## [1.2.10] - 2025-11-06
 
 ### Fixed

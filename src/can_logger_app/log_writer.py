@@ -55,7 +55,7 @@ class LogWriter(threading.Thread):
                             "timestamp": time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(log_entry["timestamp"])) + f".{int((log_entry["timestamp"] % 1) * 1e6):06d}",
                             "message_id": f"0x{log_entry['message_id']:x}",
                             "signal": log_entry["signal"],
-                            "value": log_entry["value"]
+                            "value": float(log_entry["value"])
                         }
                         if config.DEBUG_PRINTING:
                             logger.debug(f"[LOG WRITER] Writing: {formatted_entry}")
