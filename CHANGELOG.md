@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.12] - 2025-11-06
+
+### Changed
+
+- **CAN Log Summary Display:** The final CAN Data Logging Summary (`[LOGGED]` / `[UNSEEN]` status) is now displayed in the main application's console upon shutdown. Previously, this summary was only available in a separate log file for the `can_logger_app` process. This was achieved by passing the summary data from the child process back to the main process for printing.
+
 ## [1.2.11] - 2025-11-06
 
 ### Fixed

@@ -2,6 +2,8 @@
 
 ## 1. Project Overview
 
+**Developer Instruction:** Do NOT remove debug messages from the console, unless explicitly asked by the user to do so.
+
 This project, `CANenbl_unifiedRadarTracker`, merges two systems:
 1.  A real-time radar tracking application (`radar_tracker`) built on PyQt5 and `QThread`.
 2.  A high-performance CAN logging application (`can_logger_app`) built on `multiprocessing`.

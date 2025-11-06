@@ -45,12 +45,6 @@ class LogWriter(threading.Thread):
                         if config.DEBUG_PRINTING:
                             logger.debug(f"[LOG WRITER] Dequeued: {log_entry}")
 
-                        # The worker now sends a dict to signal its logged signals
-                        # We need to filter those out
-                        if isinstance(log_entry, dict) and "worker_signals" in log_entry:
-                            # In the future, we might want to do something with this
-                            continue
-
                         # Re-format the entry for JSON logging
                         formatted_entry = {
                             "timestamp": time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(log_entry["timestamp"])) + f".{int((log_entry["timestamp"] % 1) * 1e6):06d}",

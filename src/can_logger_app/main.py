@@ -13,7 +13,7 @@ import sys # Import sys for stdout/stderr redirection
 
 # --- NOTE: Only modules needed by all processes remain at the top level ---
 
-def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface_choice='peak', can_logger_ready=None, log_queue=None):
+def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface_choice='peak', can_logger_ready=None, log_queue=None, can_summary_data=None):
     """
     Main function using a shared memory pipeline and a high-performance queue.
     
@@ -135,6 +135,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
     
     raw_mp_queue = multiprocessing.Queue(maxsize=4000)
     log_queue = multiprocessing.Queue(maxsize=16384)
+    worker_signals_queue = multiprocessing.Queue() # New queue for worker signals
     
     perf_tracker = manager.dict()
     processes = []
@@ -187,7 +188,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
             p = multiprocessing.Process(
                 target=processing_worker,
                 # MODIFIED: Pass the can_logger_ready event to the worker
-                args=(i, decoding_rules, raw_mp_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag),
+                args=(i, decoding_rules, raw_mp_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag, worker_signals_queue),
                 daemon=True
             )
             processes.append(p)
@@ -285,31 +286,22 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
         print(" -> All CAN logger components stopped.")
         
         logged_signals_set = set()
-        while not log_queue.empty():
+        while not worker_signals_queue.empty():
             try:
-                entry = log_queue.get_nowait()
-                if isinstance(entry, dict) and "worker_signals" in entry:
-                    logged_signals_set.update(entry["worker_signals"])
+                # Each item in this queue is a set of signal names from a worker
+                signal_set = worker_signals_queue.get_nowait()
+                if isinstance(signal_set, set):
+                    logged_signals_set.update(signal_set)
             except Exception:
                 break
         
-        unseen_signals = all_monitoring_signals - logged_signals_set
+        # --- Final Report: Populate shared summary dict ---
+        if can_summary_data is not None:
+            # Convert sets to lists for compatibility with Manager.dict
+            can_summary_data['logged_signals'] = list(logged_signals_set)
+            can_summary_data['all_signals'] = list(all_monitoring_signals)
 
-        # --- Final Report: Logged and Unseen Signals ---
-        print("\n--- Data Logging Summary ---")
-        if logged_signals_set:
-            print("The following signals were successfully logged at least once:")
-            for signal in sorted(list(logged_signals_set)):
-                print(f" - [LOGGED] {signal}")
-        else:
-            print("Warning: No signals from the monitoring list were logged.")
-
-        if unseen_signals:
-            print("\nThe following signals were on the monitoring list but were NEVER logged:")
-            for signal in sorted(list(unseen_signals)):
-                print(f" - [UNSEEN] {signal}")
-        elif logged_signals_set:
-            print("\n -> All signals in the monitoring list were logged successfully.")
+        # --- Original print statements are removed as the main process will now handle this ---
         
         print(" -> Logging complete.")
         

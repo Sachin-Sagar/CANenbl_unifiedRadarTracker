@@ -12,6 +12,5 @@ wheels/
 backup
 input
 .vscode
-output
 sample_console_out
-
+output

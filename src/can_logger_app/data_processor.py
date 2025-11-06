@@ -13,13 +13,14 @@ logger = logging.getLogger(__name__)
 
 LOG_ENTRY_FORMAT = struct.Struct('=dI32sd')
 
-def processing_worker(worker_id, decoding_rules, raw_queue, results_queue, perf_tracker, live_data_dict=None, can_logger_ready=None, shutdown_flag=None):
+def processing_worker(worker_id, decoding_rules, raw_queue, results_queue, perf_tracker, live_data_dict=None, can_logger_ready=None, shutdown_flag=None, worker_signals_queue=None):
     """
     MODIFIED: Now accepts an optional 'live_data_dict' (a Manager.dict())
     to share the latest signal values with another process.
     MODIFIED: Now accepts 'can_logger_ready' (a multiprocessing.Event) to signal when the first data is ready.
     MODIFIED: Now puts the entire log entry dictionary into the results_queue instead of using shared memory.
     MODIFIED: Now accepts a 'shutdown_flag' (a multiprocessing.Event) to signal when to stop processing.
+    MODIFIED: Now accepts a 'worker_signals_queue' to send the final set of logged signals.
     """
     local_logged_signals = set()
 
@@ -91,6 +92,6 @@ def processing_worker(worker_id, decoding_rules, raw_queue, results_queue, perf_
     except Exception as e:
         print(f"Error in worker {worker_id}: {e}")
     finally:
-        # Put the locally tracked signals into the main results queue for aggregation
-        # This is a bit of a hack, we'll send a dict to distinguish it
-        results_queue.put({"worker_signals": local_logged_signals})
+        # Put the locally tracked signals into the dedicated worker signals queue for aggregation
+        if worker_signals_queue:
+            worker_signals_queue.put(local_logged_signals)

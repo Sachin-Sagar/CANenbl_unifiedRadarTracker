@@ -32,6 +32,7 @@ if __name__ == '__main__':
     shutdown_flag = multiprocessing.Event()
     can_logger_ready = multiprocessing.Event() # Event to signal CAN logger readiness
     shared_live_can_data = manager.dict() # This dict will be shared
+    can_summary_data = manager.dict() # For sharing the final CAN summary
 
     # Create a timestamped output directory
     output_dir = os.path.join("output", datetime.now().strftime('%Y%m%d_%H%M%S'))
@@ -127,7 +128,7 @@ if __name__ == '__main__':
                 # MODIFIED: Pass the shared dict and can_interface to the logger
                 can_logger_process = multiprocessing.Process(
                     target=can_logger_main, 
-                    args=(shutdown_flag, output_dir, shared_live_can_data, can_interface, can_logger_ready, log_queue)
+                    args=(shutdown_flag, output_dir, shared_live_can_data, can_interface, can_logger_ready, log_queue, can_summary_data)
                 )
                 can_logger_process.start()
 
@@ -176,7 +177,7 @@ if __name__ == '__main__':
                     # MODIFIED: Pass the shared dict and can_interface to the logger
                     can_logger_process = multiprocessing.Process(
                         target=can_logger_main, 
-                        args=(shutdown_flag, output_dir, shared_live_can_data, can_interface, can_logger_ready, log_queue)
+                        args=(shutdown_flag, output_dir, shared_live_can_data, can_interface, can_logger_ready, log_queue, can_summary_data)
                     )
                     can_logger_process.start()
                 
@@ -213,5 +214,34 @@ if __name__ == '__main__':
                     can_logger_process.terminate()
                     can_logger_process.join()
             logger.info("Application shut down.")
+
+    # --- Print Final CAN Summary Report ---
+    if can_summary_data:
+        logger.info("\n--- CAN Data Logging Summary ---")
+        try:
+            # Convert back from Manager.list to sets
+            logged_signals = set(can_summary_data.get('logged_signals', []))
+            all_signals = set(can_summary_data.get('all_signals', []))
+            
+            if not all_signals:
+                logger.info("No CAN signals were monitored.")
+            else:
+                unseen_signals = all_signals - logged_signals
+
+                if logged_signals:
+                    logger.info("The following signals were successfully logged at least once:")
+                    for signal in sorted(list(logged_signals)):
+                        logger.info(f" - [LOGGED] {signal}")
+                else:
+                    logger.warning("Warning: No signals from the monitoring list were logged.")
+
+                if unseen_signals:
+                    logger.info("\nThe following signals were on the monitoring list but were NEVER logged:")
+                    for signal in sorted(list(unseen_signals)):
+                        logger.info(f" - [UNSEEN] {signal}")
+                elif logged_signals:
+                    logger.info("\n -> All signals in the monitoring list were logged successfully.")
+        except Exception as e:
+            logger.error(f"Could not print CAN summary: {e}")
 
     listener.stop()
