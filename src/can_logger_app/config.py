@@ -12,7 +12,8 @@ CAN_BITRATE = 500000
 
 # --- General Settings ---
 # Set to True to enable verbose debug printing, False to disable.
-DEBUG_PRINTING = False
+# --- Debugging --- #
+DEBUG_LOGGING = True
 
 
 # --- File and Directory Paths ---

@@ -327,7 +327,7 @@ def main(output_dir, shutdown_flag=None, shared_live_can_data=None, can_logger_r
     radar_worker.finished.connect(radar_worker.deleteLater)
     worker_thread.finished.connect(worker_thread.deleteLater)
     worker_thread.start()
-    sys.exit(app.exec_())
+    app.exec_()
 
 if __name__ == '__main__':
     # This allows the script to be run standalone for testing.

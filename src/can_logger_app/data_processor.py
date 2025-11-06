@@ -5,17 +5,21 @@ import time
 import struct
 import queue
 
+from . import config
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 LOG_ENTRY_FORMAT = struct.Struct('=dI32sd')
 
-def processing_worker(worker_id, decoding_rules, raw_queue, index_queue, shared_mem_array, results_queue, perf_tracker, live_data_dict=None, can_logger_ready=None):
+def processing_worker(worker_id, decoding_rules, raw_queue, results_queue, perf_tracker, live_data_dict=None, can_logger_ready=None):
     """
     MODIFIED: Now accepts an optional 'live_data_dict' (a Manager.dict())
     to share the latest signal values with another process.
     MODIFIED: Now accepts 'can_logger_ready' (a multiprocessing.Event) to signal when the first data is ready.
+    MODIFIED: Now puts the entire log entry dictionary into the results_queue instead of using shared memory.
     """
-    mem_view = memoryview(shared_mem_array)
-    num_slots = len(shared_mem_array) // LOG_ENTRY_FORMAT.size
-    current_slot = 0
     local_logged_signals = set()
 
     try:
@@ -23,7 +27,6 @@ def processing_worker(worker_id, decoding_rules, raw_queue, index_queue, shared_
             msg = raw_queue.get()
 
             if msg is None:
-                results_queue.put(local_logged_signals)
                 break
 
             if not isinstance(msg, can.Message):
@@ -44,36 +47,28 @@ def processing_worker(worker_id, decoding_rules, raw_queue, index_queue, shared_
                         if raw_value & (1 << (length - 1)):
                             raw_value -= (1 << length)
 
-                    # --- THIS IS THE FIX ---
-                    # Explicitly cast to a native Python float to prevent
-                    # data corruption when passing to the Manager.dict.
                     physical_value = float((raw_value * scale) + offset)
                     
-                    # --- 1. Log to file (existing logic) ---
-                    mem_offset = (current_slot % num_slots) * LOG_ENTRY_FORMAT.size
-                    LOG_ENTRY_FORMAT.pack_into(
-                        mem_view, mem_offset, msg.timestamp, msg.arbitration_id,
-                        name.encode('utf-8'), physical_value
-                    )
-                    index_queue.put(current_slot % num_slots)
+                    # --- 1. Create the log entry --- 
+                    log_entry = {
+                        "timestamp": float(msg.timestamp),
+                        "message_id": msg.arbitration_id,
+                        "signal": name,
+                        "value": physical_value
+                    }
+                    if config.DEBUG_LOGGING:
+                        logger.debug(f"[WORKER {worker_id}] Queueing: {log_entry}")
+                    results_queue.put(log_entry)
                     
-                    # --- 2. Share for live radar (NEW LOGIC) ---
+                    # --- 2. Share for live radar (existing logic) --- 
                     if live_data_dict is not None:
-                        # We use a deque (via list slicing) to store the last 10 values
-                        # This mimics the buffer from the old LiveCANManager
                         current_buffer = live_data_dict.get(name, [])
-                        # --- FIX: Also cast the timestamp to a native float ---
                         current_buffer.append((float(msg.timestamp), physical_value))
-                        # Keep only the last 10 items
                         live_data_dict[name] = current_buffer[-10:]
 
-                        # --- 3. Signal that data is ready (NEW LOGIC) ---
-                        # If the event exists and is not set yet, set it.
-                        # This tells the radar_tracker it can start processing.
                         if can_logger_ready and not can_logger_ready.is_set():
                             can_logger_ready.set()
 
-                    current_slot += 1
                     local_logged_signals.add(name)
 
                 end_time = time.perf_counter()
@@ -82,7 +77,10 @@ def processing_worker(worker_id, decoding_rules, raw_queue, index_queue, shared_
                 perf_tracker['processing_msg_count'] = perf_tracker.get('processing_msg_count', 0) + 1
 
     except KeyboardInterrupt:
-        results_queue.put(local_logged_signals)
+        pass
     except Exception as e:
         print(f"Error in worker {worker_id}: {e}")
-        results_queue.put(local_logged_signals)
+    finally:
+        # Put the locally tracked signals into the main results queue for aggregation
+        # This is a bit of a hack, we'll send a dict to distinguish it
+        results_queue.put({"worker_signals": local_logged_signals})

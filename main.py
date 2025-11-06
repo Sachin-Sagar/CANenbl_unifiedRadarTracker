@@ -16,8 +16,8 @@ import threading
 import multiprocessing
 
 
-import json
 import logging
+from logging.handlers import QueueHandler, QueueListener
 from src.radar_tracker.json_log_handler import JSONLogHandler
 
 if __name__ == '__main__':
@@ -37,14 +37,49 @@ if __name__ == '__main__':
     output_dir = os.path.join("output", datetime.now().strftime('%Y%m%d_%H%M%S'))
     os.makedirs(output_dir, exist_ok=True)
 
-    # --- Setup File-based Logging --- 
-    log_file_path = os.path.join(output_dir, "console_log.txt")
-    file_handler = logging.FileHandler(log_file_path, mode='w')
-    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-    logging.getLogger().addHandler(file_handler)
-    logging.getLogger().setLevel(logging.DEBUG) # Change to logging.WARNING or logging.ERROR for less verbosity
+    # --- Setup File-based and Multiprocessing Logging ---
+    log_queue = multiprocessing.Queue()
 
+    # Create a directory for console logs
+    console_out_dir = os.path.join(output_dir, "console_out")
+    os.makedirs(console_out_dir, exist_ok=True)
 
+    # Define filters for different log categories
+    class CANFilter(logging.Filter):
+        def filter(self, record):
+            return 'can_logger_app' in record.pathname
+
+    class RadarProcessingFilter(logging.Filter):
+        def filter(self, record):
+            return 'radar_tracker' in record.pathname and 'tracking' not in record.name
+
+    class TrackingFilter(logging.Filter):
+        def filter(self, record):
+            return 'tracking' in record.name
+
+    # Create handlers for each category
+    can_handler = logging.FileHandler(os.path.join(console_out_dir, 'can_processing.log'), mode='w')
+    can_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
+    can_handler.addFilter(CANFilter())
+
+    radar_handler = logging.FileHandler(os.path.join(console_out_dir, 'radar_processing.log'), mode='w')
+    radar_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
+    radar_handler.addFilter(RadarProcessingFilter())
+
+    tracking_handler = logging.FileHandler(os.path.join(console_out_dir, 'tracking.log'), mode='w')
+    tracking_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
+    tracking_handler.addFilter(TrackingFilter())
+
+    # Configure the listener to handle logs from the queue
+    from src.radar_tracker.console_logger import json_log_handler
+    
+    listener = QueueListener(log_queue, can_handler, radar_handler, tracking_handler)
+    listener.start()
+
+    # The main process's root logger sends to the queue
+    root_logger = logging.getLogger()
+    root_logger.addHandler(QueueHandler(log_queue))
+    root_logger.setLevel(logging.DEBUG)
 
     # --- Ask for mode ---
     logger.info("--- Welcome to the Unified Radar Tracker ---")
@@ -56,6 +91,7 @@ if __name__ == '__main__':
             logger.info("Invalid choice. Please enter 1 or 2.")
 
     can_interface = None # Initialize can_interface
+    effective_can_logger_ready = can_logger_ready # Assume CAN is used by default
 
     if mode == '1':
         # --- Ask for CAN interface ---
@@ -70,6 +106,7 @@ if __name__ == '__main__':
                 break
             elif can_interface_choice in ['3', 'no can', 'none']:
                 can_interface = None
+                effective_can_logger_ready = None # Set to None for "No CAN" mode
                 break
             else:
                 logger.info("Invalid choice. Please enter 1, 2, or 3.")
@@ -90,25 +127,28 @@ if __name__ == '__main__':
                 # MODIFIED: Pass the shared dict and can_interface to the logger
                 can_logger_process = multiprocessing.Process(
                     target=can_logger_main, 
-                    args=(shutdown_flag, output_dir, shared_live_can_data, can_interface, can_logger_ready)
+                    args=(shutdown_flag, output_dir, shared_live_can_data, can_interface, can_logger_ready, log_queue)
                 )
                 can_logger_process.start()
 
-            # Start the stop signal checker in a separate thread
-            stop_thread = threading.Thread(target=check_for_switch_off, args=(shutdown_flag,))
-            stop_thread.start()
+                # Start the stop signal checker in a separate thread
+                stop_thread = threading.Thread(target=check_for_switch_off, args=(shutdown_flag,))
+                stop_thread.start()
 
             # Launch the appropriate mode
             if mode == '1':
                 logger.info("\nStarting in LIVE mode...")
                 # MODIFIED: Pass the shared dict and ready event to the live radar main
-                main_live(output_dir, shutdown_flag, shared_live_can_data, can_logger_ready)
+                main_live(output_dir, shutdown_flag, shared_live_can_data, effective_can_logger_ready)
             elif mode == '2':
                 logger.info("\nStarting in PLAYBACK mode...")
                 run_playback(output_dir)
 
         finally:
             shutdown_flag.set() # Signal all processes to shutdown
+
+            if 'stop_thread' in locals() and stop_thread.is_alive():
+                stop_thread.join(timeout=2)
 
             if can_logger_process and can_logger_process.is_alive():
                 logger.info("Signaling CAN logger to shut down...")
@@ -136,7 +176,7 @@ if __name__ == '__main__':
                     # MODIFIED: Pass the shared dict and can_interface to the logger
                     can_logger_process = multiprocessing.Process(
                         target=can_logger_main, 
-                        args=(shutdown_flag, output_dir, shared_live_can_data, can_interface, can_logger_ready)
+                        args=(shutdown_flag, output_dir, shared_live_can_data, can_interface, can_logger_ready, log_queue)
                     )
                     can_logger_process.start()
                 
@@ -144,7 +184,7 @@ if __name__ == '__main__':
                 # MODIFIED: Pass the shared dict and ready event to the live radar main
                 live_thread = threading.Thread(
                     target=main_live, 
-                    args=(output_dir, shutdown_flag, shared_live_can_data, can_logger_ready)
+                    args=(output_dir, shutdown_flag, shared_live_can_data, effective_can_logger_ready)
                 )
                 live_thread.start()
                 
@@ -174,8 +214,4 @@ if __name__ == '__main__':
                     can_logger_process.join()
             logger.info("Application shut down.")
 
-    # --- Write console logs to JSON at the very end ---
-    from src.radar_tracker.console_logger import json_log_handler
-    with open(os.path.join(output_dir, "console_log.json"), 'w') as f:
-        json.dump(json_log_handler.log_records, f, indent=4)
-    logger.info(f"Console log saved to {os.path.join(output_dir, 'console_log.json')}")
+    listener.stop()

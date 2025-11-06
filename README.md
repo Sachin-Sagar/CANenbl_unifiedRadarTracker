@@ -101,7 +101,11 @@ This project uses `uv` for fast dependency management, but standard `pip` also w
 
 ### Data Logging
 *   **Organized Output:** All logs from a session (CAN, radar, track history, console) are saved into a single, timestamped directory (e.g., `output/YYYYMMDD_HHMMSS/`).
-*   **Comprehensive Logs:** Includes a JSON Lines file for CAN signals, a raw radar log, the final track history with fused data, and console logs for debugging.
+*   **Categorized Console Logs:** To simplify debugging, all console output is split into three distinct files within the `output/YYYYMMDD_HHMMSS/console_out/` directory:
+    *   `can_processing.log`: Logs related to the CAN bus, decoding, and data sharing.
+    *   `radar_processing.log`: Logs related to radar configuration, data parsing, and hardware communication.
+    *   `tracking.log`: Logs related to the core tracking algorithm, including track creation, updates, and state estimation.
+*   **Comprehensive Data:** Includes a JSON Lines file for raw CAN signals, a raw radar log, and the final track history with fused data.
 
 ## 6. Hardware Recommendations
 
@@ -152,6 +156,11 @@ This design isolates the hardware-specific CAN operations from the main applicat
     *   **Symptom:** The application fails to start the CAN logger process.
     *   **Cause:** A `multiprocessing` issue on Windows where non-picklable resources (like hardware handles) are inherited by child processes, causing a crash.
     *   **Solution:** All hardware-related modules are now imported within the `if __name__ == '__main__':` block in `main.py`, preventing this issue.
+
+*   **Unnecessary Wait in "No CAN" Mode:**
+    *   **Symptom:** In "No CAN" mode, the application would pause for 10 seconds, appearing to wait for a CAN logger that was not active.
+    *   **Cause:** The `RadarWorker` was waiting for a `can_logger_ready` event that would never be triggered in this mode.
+    *   **Solution:** The application now passes a `None` value for the event when "No CAN" mode is selected, causing the `RadarWorker` to correctly bypass the waiting period.
 
 *   **Data Corruption in Log Files (`track_history.json`, `can_log.json`):**
     *   **Symptom:** Numeric values in the JSON log files appear as massive, incorrect numbers.

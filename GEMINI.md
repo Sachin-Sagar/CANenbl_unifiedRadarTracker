@@ -339,3 +339,54 @@ The root cause was traced to the `can_logger_app/log_writer.py` module. The `dat
 
 #### The Solution
 The fix was implemented in `src/can_logger_app/log_writer.py`. Before writing the log entry to the JSON file, the `value` read from the shared memory is now explicitly cast to a native Python `float()` using `float(value)`. This ensures that the `json.dumps()` function receives a standard data type it can serialize correctly, resolving the corruption in the `can_log.json` file.
+
+### Part 20: Bugfix - Threading Error in "No CAN" Mode on Linux
+
+#### The Problem
+The application would crash with a `NameError` during shutdown when running in "No CAN" mode on Linux.
+
+#### The Cause
+The `main.py` script was attempting to join a `stop_thread` (which checks for a hardware-off signal) that was never created in "No CAN" mode.
+
+#### The Solution
+The `stop_thread` initialization and start logic was moved inside the `if mode == '1' and can_interface is not None:` block in `main.py`. Additionally, the `finally` block was updated to check if `stop_thread` exists before attempting to join it.
+
+### Part 21: Feature - Categorized Console Logging
+
+#### The Goal
+To improve log readability by splitting the single console log file into multiple categorized files.
+
+#### The Implementation
+1.  **Refactored Logging in `main.py`:** The logging system in `main.py` was refactored to create a `console_out` directory inside the timestamped output folder.
+2.  **Created Categorized Handlers:** Three `FileHandler`s were created for `can_processing`, `radar_processing`, and `tracking`, with corresponding `Filter` objects.
+3.  **Initial Filtering Strategy:** The filters were initially based on logger names.
+
+### Part 22: Bugfix - Application Crash and Empty Log Files
+
+#### The Problem
+After implementing categorized logging, the application started crashing on exit with code 134 (`SIGABRT`). Additionally, the newly created log files were empty.
+
+#### The Diagnosis (Crash)
+The crash was traced to two issues:
+1.  The logging `QueueListener` was not being stopped, causing an unclean shutdown.
+2.  The `main_live.py` script was calling `sys.exit()`, which terminated the process before the main script could finish its shutdown sequence.
+
+#### The Diagnosis (Empty Files)
+The empty log files were caused by a flawed filtering strategy. The loggers in the `radar_tracker` modules were all sharing the same name, so the name-based filters could not differentiate them.
+
+#### The Solution
+1.  **Crash Fix:**
+    -   `listener.stop()` was added to `main.py` to ensure the logging listener shuts down gracefully.
+    -   The `sys.exit()` call was removed from `src/radar_tracker/main_live.py`.
+2.  **Empty Files Fix:** The logging filters in `main.py` were changed to use `record.pathname` instead of `record.name`. This allows for reliable categorization based on the file path of the module generating the log message.
+
+### Part 23: Bugfix - Unnecessary Wait in "No CAN" Mode
+
+#### The Problem
+The application would wait for 10 seconds for the CAN logger to initialize, even when "No CAN" mode was selected.
+
+#### The Cause
+The `can_logger_ready` event was being passed to the `RadarWorker` even in "No CAN" mode, causing the worker to wait for an event that would never be set.
+
+#### The Solution
+The `main.py` script was modified to pass `None` as the `can_logger_ready` argument to `main_live` when "No CAN" mode is selected. This makes the `RadarWorker` skip the waiting logic.

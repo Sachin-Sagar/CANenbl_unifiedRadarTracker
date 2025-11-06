@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.9] - 2025-11-06
+
+### Fixed
+
+- **Unnecessary Wait in "No CAN" Mode:** Resolved an issue where the application would unnecessarily wait for the CAN logger to initialize when running in "No CAN" mode. The fix ensures that the `RadarWorker` does not wait for the `can_logger_ready` event when no CAN interface is selected.
+
+## [1.2.8] - 2025-11-06
+
+### Added
+
+- **Categorized Console Logging:** Implemented a new logging system that splits console output into three distinct categories: `can_processing`, `radar_processing`, and `tracking`. These logs are now saved as separate files (`can_processing.log`, `radar_processing.log`, `tracking.log`) within a new `console_out` directory inside the timestamped output folder. This change provides a more organized and debuggable logging structure.
+
+## [1.2.7] - 2025-11-06
+
+### Fixed
+
+- **Threading Error in "No CAN" Mode on Linux:** Resolved a `NameError` that occurred during shutdown when running in "No CAN" mode on a Linux system. The error was caused by an attempt to join a `stop_thread` that was never created. The fix ensures that the thread responsible for checking the hardware-off signal is only initialized and managed when a CAN interface is actively in use.
+
+## [1.2.6] - 2025-11-06
+
+### Fixed
+
+- **can_log.json Data Corruption:** Resolved an issue where the `can_log.json` file contained corrupted data. This was due to a race condition where multiple `data_processor` workers were writing to a shared memory array, leading to mixed and incorrect log entries. The fix involved refactoring the `can_logger_app` to use a direct `multiprocessing.Queue` for log entries, ensuring atomic and uncorrupted data transfer from workers to the `LogWriter`.
+- **Centralized Multiprocess Logging:** Implemented a robust logging solution for multiprocessing environments. The main application now uses a `logging.handlers.QueueHandler` and `logging.handlers.QueueListener` to collect logs from all processes, including the `can_logger_app`. All console output, including debug messages from child processes, is now correctly captured and written to `console_log.txt` and `console_log.json`. Debug messages in `data_processor.py` and `log_writer.py` are now controlled by the `DEBUG_LOGGING` flag in `src/can_logger_app/config.py`.
+
 ## [1.2.5] - 2025-11-04
 
 ### Added

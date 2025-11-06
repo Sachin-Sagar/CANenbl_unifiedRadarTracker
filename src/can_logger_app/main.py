@@ -7,10 +7,12 @@ import multiprocessing
 import struct
 import signal
 import threading # <-- MODIFIED: Import threading
+import logging
+import logging.handlers
 
 # --- NOTE: Only modules needed by all processes remain at the top level ---
 
-def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface_choice='peak', can_logger_ready=None):
+def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface_choice='peak', can_logger_ready=None, log_queue=None):
     """
     Main function using a shared memory pipeline and a high-performance queue.
     
@@ -20,6 +22,12 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
         live_data_dict (multiprocessing.Manager.dict, optional): Shared dictionary to update with live CAN data.
         can_interface_choice (str, optional): The chosen CAN interface ('peak' or 'kvaser'). Defaults to 'peak'.
     """
+    if log_queue:
+        # Use a named logger for this specific application part
+        logger = logging.getLogger('can_logger_app')
+        logger.addHandler(logging.handlers.QueueHandler(log_queue))
+        logger.setLevel(logging.DEBUG)
+
     # --- MODIFICATION: Imports are moved inside main() ---
     import can
     import cantools
@@ -113,12 +121,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
     manager = multiprocessing.Manager()
     
     raw_mp_queue = multiprocessing.Queue(maxsize=4000)
-    index_mp_queue = manager.Queue(maxsize=16384) 
-    
-    results_queue = manager.Queue()
-
-    buffer_size = 16384 * LOG_ENTRY_FORMAT.size
-    shared_mem_array = multiprocessing.RawArray('c', buffer_size)
+    log_queue = multiprocessing.Queue(maxsize=16384)
     
     perf_tracker = manager.dict()
     processes = []
@@ -160,7 +163,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
         print(" -> CAN Connection successful. Proceeding with logger setup.")
 
         print(" -> Initializing log writer thread...")
-        log_writer_thread = LogWriter(index_queue=index_mp_queue, shared_mem_array=shared_mem_array, filepath=output_filepath, perf_tracker=perf_tracker)
+        log_writer_thread = LogWriter(log_queue=log_queue, filepath=output_filepath, perf_tracker=perf_tracker)
         log_writer_thread.start()
         print(" -> Log writer thread started.")
 
@@ -170,7 +173,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
             p = multiprocessing.Process(
                 target=processing_worker,
                 # MODIFIED: Pass the can_logger_ready event to the worker
-                args=(i, decoding_rules, raw_mp_queue, index_mp_queue, shared_mem_array, results_queue, perf_tracker, live_data_dict, can_logger_ready),
+                args=(i, decoding_rules, raw_mp_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready),
                 daemon=True
             )
             processes.append(p)
@@ -249,10 +252,11 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
         print(" -> Workers stopped.")
         
         logged_signals_set = set()
-        while not results_queue.empty():
+        while not log_queue.empty():
             try:
-                signal_set = results_queue.get_nowait()
-                logged_signals_set.update(signal_set)
+                entry = log_queue.get_nowait()
+                if isinstance(entry, dict) and "worker_signals" in entry:
+                    logged_signals_set.update(entry["worker_signals"])
             except Exception:
                 break
         
