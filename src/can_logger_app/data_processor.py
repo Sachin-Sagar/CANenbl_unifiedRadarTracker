@@ -37,17 +37,14 @@ def processing_worker(worker_id, decoding_rules, raw_queue, results_queue, perf_
             if msg is None:
                 break
 
-            if not isinstance(msg, can.Message):
-                continue
-            
             if config.DEBUG_PRINTING:
                 logger.debug(f"[WORKER {worker_id}] Processing raw CAN message: {msg}")
 
             start_time = time.perf_counter()
 
-            if msg.arbitration_id in decoding_rules:
-                rules = decoding_rules[msg.arbitration_id]
-                data_int = int.from_bytes(msg.data, byteorder='little')
+            if msg['arbitration_id'] in decoding_rules:
+                rules = decoding_rules[msg['arbitration_id']]
+                data_int = int.from_bytes(msg['data'], byteorder='little')
                 
                 for name, is_signed, start, length, scale, offset in rules:
                     shifted = data_int >> start
@@ -62,8 +59,8 @@ def processing_worker(worker_id, decoding_rules, raw_queue, results_queue, perf_
                     
                     # --- 1. Create the log entry --- 
                     log_entry = {
-                        "timestamp": float(msg.timestamp),
-                        "message_id": msg.arbitration_id,
+                        "timestamp": float(msg['timestamp']),
+                        "message_id": msg['arbitration_id'],
                         "signal": name,
                         "value": physical_value
                     }
@@ -74,7 +71,7 @@ def processing_worker(worker_id, decoding_rules, raw_queue, results_queue, perf_
                     # --- 2. Share for live radar (existing logic) --- 
                     if live_data_dict is not None:
                         current_buffer = live_data_dict.get(name, [])
-                        current_buffer.append((float(msg.timestamp), physical_value))
+                        current_buffer.append((float(msg['timestamp']), physical_value))
                         live_data_dict[name] = current_buffer[-10:]
 
                         if can_logger_ready and not can_logger_ready.is_set():

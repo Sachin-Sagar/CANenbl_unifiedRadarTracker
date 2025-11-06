@@ -60,7 +60,13 @@ class CANReader(threading.Thread):
                     
                     if queue_name:
                         try:
-                            self.data_queues[queue_name].put_nowait(msg)
+                            # Create a simple, pickle-safe dictionary
+                            data_to_queue = {
+                                "timestamp": msg.timestamp,
+                                "arbitration_id": msg.arbitration_id,
+                                "data": msg.data
+                            }
+                            self.data_queues[queue_name].put_nowait(data_to_queue)
                             end_time = time.perf_counter()
                             duration = (end_time - start_time)
                             self.perf_tracker['dispatch_total_time'] = self.perf_tracker.get('dispatch_total_time', 0) + duration

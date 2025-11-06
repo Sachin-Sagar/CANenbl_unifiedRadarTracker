@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.13] - 2025-11-06
+
+### Fixed
+
+- **CAN Data Corruption in `can_log.json`:** Resolved a critical bug where decoded CAN signal values were constant and incorrect in the final `can_log.json` file. The issue was caused by improper serialization of the complex `can.Message` object when passed between the `can_handler` and `data_processor` processes via a `multiprocessing.Queue`.
+    - The fix involved changing the data passed to the queue from a `can.Message` object to a simple, pickle-safe Python dictionary containing only the essential message attributes (`timestamp`, `arbitration_id`, `data`).
+    - `can_handler.py` was updated to create this dictionary.
+    - `data_processor.py` was updated to expect and process this dictionary, ensuring fresh data is decoded for every message.
+
 ## [1.2.12] - 2025-11-06
 
 ### Changed
