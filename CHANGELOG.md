@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.10] - 2025-11-06
+
+### Fixed
+
+- **CAN Logger Configuration on Windows:** Resolved an `AttributeError: 'NoneType' object has no attribute 'DEBUG_PRINTING'` occurring in the `can_logger_app` process on Windows. This was fixed by:
+    - Renaming `DEBUG_LOGGING` to `DEBUG_PRINTING` in `src/can_logger_app/config.py` to match its usage.
+    - Changing relative imports of `config` and `utils` to absolute imports (`from can_logger_app import config`, `from can_logger_app import utils`) in `src/can_logger_app/main.py` and `src/can_logger_app/utils.py`. This ensures correct module loading in spawned child processes on Windows.
+
+### Added
+
+- **CAN Logger Process Health Checks:** Implemented periodic debug logging in `src/can_logger_app/main.py` to monitor the `CANReader` thread, `LogWriter` thread, and worker processes. These health checks provide visibility into the status of multiprocessing components and are logged to the console and `console_out` files.
+
 ## [1.2.9] - 2025-11-06
 
 ### Fixed

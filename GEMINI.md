@@ -390,3 +390,20 @@ The `can_logger_ready` event was being passed to the `RadarWorker` even in "No C
 
 #### The Solution
 The `main.py` script was modified to pass `None` as the `can_logger_ready` argument to `main_live` when "No CAN" mode is selected. This makes the `RadarWorker` skip the waiting logic.
+
+### Part 24: Bugfix - `AttributeError` in CAN Logger on Windows
+
+#### The Problem
+When running the application with the Kvaser CAN interface on Windows, the `can_logger_app` process would fail to start, and the application would crash. The console showed an `AttributeError: 'NoneType' object has no attribute 'DEBUG_PRINTING'` originating from `src/can_logger_app/utils.py`.
+
+#### The Diagnosis
+The investigation revealed two separate but related issues that only manifested on Windows due to its `spawn` multiprocessing model:
+1.  **Incorrect Configuration Variable:** The code in `src/can_logger_app/utils.py` was checking for a configuration flag named `config.DEBUG_PRINTING`, but the actual variable defined in `src/can_logger_app/config.py` was `DEBUG_LOGGING`. This was a simple typo but was the first point of failure.
+2.  **Relative Import Failure:** The more critical underlying issue was that modules within the `can_logger_app` (like `main.py` and `utils.py`) were using relative imports (e.g., `from . import config`). When the new process was spawned on Windows, these relative imports failed to load the modules correctly, causing the imported `config` object to be `None`. This is why the `AttributeError` occurred.
+
+#### The Solution
+A two-part fix was implemented:
+1.  **Correct Variable Name:** The `DEBUG_LOGGING` variable in `src/can_logger_app/config.py` was renamed to `DEBUG_PRINTING` to match its usage throughout the rest of the `can_logger_app` code.
+2.  **Use Absolute Imports:** All relative imports within the `can_logger_app` were converted to absolute imports. For example, in `src/can_logger_app/utils.py` and `src/can_logger_app/main.py`, `from . import config` was changed to `from can_logger_app import config`. This ensures that the Python interpreter in the newly spawned process can reliably locate and load the necessary modules, preventing the `config` object from being `None`.
+
+This change resolves the startup crash on Windows and makes the module loading more robust and explicit.

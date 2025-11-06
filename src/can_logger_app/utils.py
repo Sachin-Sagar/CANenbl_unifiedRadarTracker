@@ -3,7 +3,7 @@
 import os
 import cantools
 import bitstruct
-from . import config
+from can_logger_app import config
 
 def load_signals_to_monitor(file_path):
     """

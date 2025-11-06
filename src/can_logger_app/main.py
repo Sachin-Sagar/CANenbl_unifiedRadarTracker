@@ -31,8 +31,8 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
     # --- MODIFICATION: Imports are moved inside main() ---
     import can
     import cantools
-    from . import config
-    from . import utils
+    from can_logger_app import config
+    from can_logger_app import utils
     from .can_handler import CANReader
     from .data_processor import processing_worker, LOG_ENTRY_FORMAT
     from .log_writer import LogWriter
@@ -180,14 +180,29 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
             p.start()
 
         print("\n[+] Logging data... Press Ctrl-C to stop.")
+        last_check_time = time.time()
         while not (shutdown_flag and shutdown_flag.is_set()):
+            # --- Health Checks for all processes and threads ---
             if not all(p.is_alive() for p in processes):
-                print("\nError: One or more worker processes have died unexpectedly. Shutting down.")
+                logger.error("One or more worker processes have died unexpectedly. Shutting down.")
                 break
             if not dispatcher_thread.is_alive():
-                print("\nError: CANReader thread has died unexpectedly. Shutting down.")
+                logger.error("CANReader thread has died unexpectedly. Shutting down.")
                 break
-            time.sleep(1) # Check every second
+            if not log_writer_thread.is_alive():
+                logger.error("LogWriter thread has died unexpectedly. Shutting down.")
+                break
+
+            # --- Periodic status logging ---
+            current_time = time.time()
+            if current_time - last_check_time >= 5.0: # Log status every 5 seconds
+                logger.debug(f"[HEALTH CHECK] CANReader thread alive: {dispatcher_thread.is_alive()}")
+                logger.debug(f"[HEALTH CHECK] LogWriter thread alive: {log_writer_thread.is_alive()}")
+                for i, p in enumerate(processes):
+                    logger.debug(f"[HEALTH CHECK] Worker process {i} (PID: {p.pid}) alive: {p.is_alive()}")
+                last_check_time = current_time
+
+            time.sleep(1) # Main loop check interval
 
     except (KeyboardInterrupt, SystemExit):
         print("\n\n[+] Ctrl-C detected. Shutting down gracefully...")

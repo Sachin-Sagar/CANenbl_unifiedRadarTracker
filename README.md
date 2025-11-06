@@ -97,6 +97,7 @@ This project uses `uv` for fast dependency management, but standard `pip` also w
 *   **Dynamic Interface Selection:** Automatically configures the correct `python-can` backend based on user selection (PEAK/Kvaser) and OS (Windows/Linux).
 *   **Data Integrity:** All numeric data shared between processes is cast to standard Python `float` types, preventing the data corruption that can occur with `numpy` types in multiprocessing.
 *   **Synchronization:** A `multiprocessing.Event` ensures the radar tracker waits for the CAN logger to be ready, solving a critical race condition and guaranteeing that CAN data is available from the very first frame.
+*   **Process Health Monitoring:** The CAN logger process includes periodic health checks that log the status of its internal threads and worker processes at the `DEBUG` level, providing visibility for troubleshooting.
 *   **Full Data Integration:** The tracker's vehicle dynamics model now correctly uses live CAN torque, gear, and road grade signals to calculate a physics-based acceleration, which is correctly logged in the final output.
 
 ### Data Logging
@@ -141,6 +142,11 @@ The application uses a multi-process architecture to ensure stability and perfor
 This design isolates the hardware-specific CAN operations from the main application, preventing resource conflicts and solving cross-platform threading issues.
 
 ## 8. Troubleshooting and Known Issues
+
+*   **`AttributeError` on Startup (Windows with Kvaser):**
+    *   **Symptom:** The application fails to start the CAN logger process with an `AttributeError: 'NoneType' object has no attribute 'DEBUG_PRINTING'`.
+    *   **Cause:** This is a `multiprocessing` issue on Windows where relative imports within the `can_logger_app` fail to load modules correctly in the spawned child process, causing the `config` object to be `None`. A typo in a debug flag name also contributed.
+    *   **Solution:** All relative imports within the `can_logger_app` have been converted to absolute imports, and the configuration variable name has been corrected. This ensures modules are loaded reliably.
 
 *   **Kvaser on Linux Fails to Initialize:**
     *   **Symptom:** The application crashes with a `NameError: name 'canGetNumberOfChannels' is not defined` when using Kvaser hardware on Linux.
