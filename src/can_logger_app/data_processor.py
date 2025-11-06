@@ -13,18 +13,25 @@ logger = logging.getLogger(__name__)
 
 LOG_ENTRY_FORMAT = struct.Struct('=dI32sd')
 
-def processing_worker(worker_id, decoding_rules, raw_queue, results_queue, perf_tracker, live_data_dict=None, can_logger_ready=None):
+def processing_worker(worker_id, decoding_rules, raw_queue, results_queue, perf_tracker, live_data_dict=None, can_logger_ready=None, shutdown_flag=None):
     """
     MODIFIED: Now accepts an optional 'live_data_dict' (a Manager.dict())
     to share the latest signal values with another process.
     MODIFIED: Now accepts 'can_logger_ready' (a multiprocessing.Event) to signal when the first data is ready.
     MODIFIED: Now puts the entire log entry dictionary into the results_queue instead of using shared memory.
+    MODIFIED: Now accepts a 'shutdown_flag' (a multiprocessing.Event) to signal when to stop processing.
     """
     local_logged_signals = set()
 
     try:
-        while True:
-            msg = raw_queue.get()
+        while not (shutdown_flag and shutdown_flag.is_set()):
+            if shutdown_flag and shutdown_flag.is_set():
+                print(f" -> [WORKER {worker_id}] Received shutdown signal.")
+                break
+            try:
+                msg = raw_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
 
             if msg is None:
                 break

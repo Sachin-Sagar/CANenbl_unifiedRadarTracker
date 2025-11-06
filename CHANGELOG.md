@@ -9,11 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Graceful Shutdown Implementation**: Resolved `ValueError: I/O operation on closed file.`, `BrokenPipeError`, `EOFError`, and `QObject::~QObject: Timers cannot be stopped from another thread` errors by implementing a comprehensive graceful shutdown mechanism across `src/can_logger_app/main.py`, `src/can_logger_app/can_handler.py`, `src/can_logger_app/log_writer.py`, and `src/can_logger_app/data_processor.py`. This ensures all threads and processes terminate cleanly before resources are released.
 - **`IndentationError` in `src/can_logger_app/main.py`**: Corrected an `IndentationError` that occurred due to incorrect indentation within the `try...finally` block for console output redirection, and removed duplicated code.
 - **CAN Log Data Corruption (Interim Fix)**: Applied an interim fix in `src/can_logger_app/log_writer.py` to explicitly cast the signal `value` to a native Python `float()` before JSON serialization, addressing potential data type corruption.
 
 ### Added
 
+- **Shutdown Debugging Messages**: Integrated detailed debug messages into the shutdown sequence of `src/can_logger_app/main.py`, `src/can_logger_app/can_handler.py`, `src/can_logger_app/log_writer.py`, and `src/can_logger_app/data_processor.py` to provide clear console output on the status and order of component termination during shutdown.
 - **Comprehensive Console Output Redirection**: Implemented redirection of `sys.stdout` and `sys.stderr` to a timestamped log file in `output/` for `can_logger_app/main.py`, ensuring all console output is captured.
 - **Detailed CAN Message Debugging**: Added debug print statements to `src/can_logger_app/can_handler.py` (logging all received CAN messages) and `src/can_logger_app/data_processor.py` (logging raw CAN messages before decoding) to aid in diagnosing constant CAN signal values.
 

@@ -23,19 +23,20 @@ logger = logging.getLogger(__name__)
 LOG_ENTRY_FORMAT = struct.Struct('=dI32sd')
 
 class LogWriter(threading.Thread):
-    def __init__(self, log_queue, filepath, perf_tracker, batch_size=1000):
+    def __init__(self, log_queue, filepath, perf_tracker, batch_size=1000, shutdown_flag=None):
         super().__init__(daemon=True)
         self.log_queue = log_queue
         self.filepath = filepath
         self.perf_tracker = perf_tracker
         self.batch_size = batch_size
         self._is_running = threading.Event()
+        self.shutdown_flag = shutdown_flag
 
     def run(self):
         self._is_running.set()
         
         with open(self.filepath, 'a') as log_file:
-            while self._is_running.is_set() or not self.log_queue.empty():
+            while (self._is_running.is_set() and not self.shutdown_flag.is_set()) or not self.log_queue.empty():
                 write_batch = []
                 while len(write_batch) < self.batch_size:
                     try:
@@ -75,4 +76,5 @@ class LogWriter(threading.Thread):
                     self.perf_tracker['log_write_batch_count'] = self.perf_tracker.get('log_write_batch_count', 0) + 1
 
     def stop(self):
+        print(" -> [LogWriter] Received stop signal.")
         self._is_running.clear()

@@ -8,7 +8,7 @@ from . import config  # <-- This import is safe
 # --- MODIFICATION: 'import can' has been REMOVED from the top ---
 
 class CANReader(threading.Thread):
-    def __init__(self, bus_params, data_queues, id_to_queue_map, perf_tracker, connection_event):
+    def __init__(self, bus_params, data_queues, id_to_queue_map, perf_tracker, connection_event, shutdown_flag):
         """
         MODIFIED: Accepts bus_params (dict) instead of a bus object.
         'connection_event' is a threading.Event() used to signal success/failure.
@@ -23,6 +23,7 @@ class CANReader(threading.Thread):
         self._is_running = threading.Event()
         self.messages_dropped = 0
         self.messages_received = 0
+        self.shutdown_flag = shutdown_flag
 
     def run(self):
         # --- MODIFICATION: Import 'can' INSIDE the run() method ---
@@ -40,7 +41,7 @@ class CANReader(threading.Thread):
             self.connection_event.set()
             print(f" -> [CANReader] Thread connected successfully on {self.bus_params.get('channel')}.")
 
-            while self._is_running.is_set():
+            while self._is_running.is_set() and not self.shutdown_flag.is_set():
                 start_time = time.perf_counter()
                 msg = self.bus.recv(timeout=0.001) # Use a small timeout
                 
@@ -87,6 +88,7 @@ class CANReader(threading.Thread):
 
 
     def stop(self):
+        print(" -> [CANReader] Received stop signal.")
         self._is_running.clear()
         print("\n--- CANReader Diagnostics ---")
         print(f"Total messages received by CANReader: {self.messages_received}")
