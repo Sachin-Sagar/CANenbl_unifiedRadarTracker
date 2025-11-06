@@ -313,3 +313,29 @@ A deep dive into the data pipeline revealed two distinct root causes:
 A two-part fix was implemented to resolve both issues:
 1.  **Fix Data Corruption:** In `src/can_logger_app/data_processor.py`, the fix was extended. Now, both the CAN signal's `physical_value` and its `msg.timestamp` are explicitly cast to a native Python `float()` before being placed in the shared dictionary. This completely eliminates the data type mismatch and prevents inter-process corruption for all CAN signals.
 2.  **Fix Null Acceleration:** In `src/radar_tracker/tracking/algorithms/estimate_ego_motion.py`, the function's return statement was modified. It now returns the final, corrected acceleration value (`updated_kf_state['x'][2, 0]`) from the EKF's state, rather than the initial input value. This ensures the most accurate estimate for acceleration is propagated to the `tracker` and saved in the final log.
+
+### Part 18: Final Bugfix - The Data Corruption Strikes Back
+
+#### The Problem
+Even after fixing the data transfer between processes (Part 17), the CAN signal values in the final `track_history.json` were *still* showing signs of corruption.
+
+#### The Diagnosis
+The investigation revealed that the corruption was being re-introduced *inside* the `radar_tracker` process. The data was arriving from the `can_logger_app` as clean, standard Python floats. However, the `_interpolate_can_data` method in `src/radar_tracker/main_live.py` uses `numpy.interp` to estimate the CAN signal's value at the precise radar frame timestamp. This interpolation function returns a `numpy.float64` data type.
+
+This non-standard float was then passed through the rest of the tracking pipeline, where it once again caused corruption before being written to the final JSON file. The root cause was the same (a non-native float type), but it was occurring at a different stage.
+
+#### The Solution
+The final fix was applied in `src/radar_tracker/main_live.py`. Immediately after the value is calculated by the interpolation function, it is explicitly cast to a native Python `float()`.
+
+This ensures that from the moment the CAN data is interpolated, it remains a standard data type throughout the entire internal pipeline, from data adaptation to tracking to final export. This definitively solves the persistent data corruption issue.
+
+### Part 19: Bugfix - can_log.json Data Corruption
+
+#### The Problem
+The `can_log.json` file, which is supposed to be a raw log of all decoded CAN signals, was found to contain corrupted data. The numerical `value` field for signals was appearing as a garbled or incorrect number.
+
+#### The Diagnosis
+The root cause was traced to the `can_logger_app/log_writer.py` module. The `data_processor.py` worker correctly decodes the CAN message and packs the physical value into a shared memory array using `struct.pack`. This packing process creates a C-style `double` data type. The `log_writer.py` thread then reads this `double` from the shared memory but was writing it directly into the JSON file without converting it to a standard Python data type. The `json.dumps()` function does not handle C-style doubles correctly, leading to the data corruption in the output file.
+
+#### The Solution
+The fix was implemented in `src/can_logger_app/log_writer.py`. Before writing the log entry to the JSON file, the `value` read from the shared memory is now explicitly cast to a native Python `float()` using `float(value)`. This ensures that the `json.dumps()` function receives a standard data type it can serialize correctly, resolving the corruption in the `can_log.json` file.

@@ -220,7 +220,9 @@ class RadarWorker(QObject):
             else:
                 interp_value = interp_with_extrap(radar_posix_timestamp, timestamps, values)
             
-            can_data_for_frame[signal_name] = interp_value
+            # --- FIX: Cast the interpolated value to a native float ---
+            # This prevents numpy data types from corrupting the data later in the pipeline.
+            can_data_for_frame[signal_name] = float(interp_value)
 
         if root_config.DEBUG_FLAGS.get('log_can_interpolation'):
             logger.debug(f"[INTERPOLATION] Interpolated CAN data for frame: {can_data_for_frame}")

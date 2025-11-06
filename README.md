@@ -116,7 +116,68 @@ This project uses `uv` for fast dependency management, but standard `pip` also w
 
 *   **Kvaser on Linux (Use with Caution):** Not recommended due to known driver incompatibilities between `python-can` and Kvaser's proprietary `canlib` on Linux, which can cause runtime crashes.
 
-## 7. Testing
+## 7. System Architecture
+
+The application uses a multi-process architecture to ensure stability and performance, especially on Windows.
+
+1.  **Main/Radar Process (Main Thread + QThread):**
+    *   Runs the main `main.py` script.
+    *   Launches the CAN Process.
+    *   Launches the `RadarWorker` in a `QThread` to handle real-time radar data processing.
+    *   The `RadarWorker` reads live CAN data from a shared dictionary, interpolates it, and runs the tracking algorithm.
+
+2.  **CAN Process (`multiprocessing.Process`):**
+    *   This process has exclusive control of the CAN hardware.
+    *   It runs the `can_logger_app`, which contains:
+        *   A dedicated **CANReader Thread** that manages the `can.interface.Bus` object to prevent Qt threading errors.
+        *   A pool of worker sub-processes to decode CAN messages.
+        *   A **LogWriter Thread** that writes all decoded signals to `can_log.json`.
+        *   A mechanism to write the latest signal values into a shared dictionary for the Main/Radar Process.
+
+This design isolates the hardware-specific CAN operations from the main application, preventing resource conflicts and solving cross-platform threading issues.
+
+## 8. Troubleshooting and Known Issues
+
+*   **Kvaser on Linux Fails to Initialize:**
+    *   **Symptom:** The application crashes with a `NameError: name 'canGetNumberOfChannels' is not defined` when using Kvaser hardware on Linux.
+    *   **Cause:** This is due to a known incompatibility between the `python-can` library and Kvaser's proprietary Linux drivers.
+    *   **Solution:** Use PCAN hardware with the `SocketCAN` interface on Linux. It is more stable and integrated directly into the Linux kernel. When prompted, select `PEAK (pcan)`.
+
+*   **`QObject` Timer Errors on Shutdown (Windows):**
+    *   **Symptom:** The application crashes on exit with `QObject::~QObject: Timers cannot be stopped from another thread`.
+    *   **Cause:** The `python-can` `pcan` backend uses Qt. This error occurs if the `can.Bus` object is created in a different thread from where it is used and destroyed.
+    *   **Solution:** The application's architecture now ensures the CAN bus object's entire lifecycle is handled within a single, dedicated thread inside the `CAN Process`, which has resolved this issue.
+
+*   **`PermissionError: [WinError 5] Access is denied` on Startup (Windows):**
+    *   **Symptom:** The application fails to start the CAN logger process.
+    *   **Cause:** A `multiprocessing` issue on Windows where non-picklable resources (like hardware handles) are inherited by child processes, causing a crash.
+    *   **Solution:** All hardware-related modules are now imported within the `if __name__ == '__main__':` block in `main.py`, preventing this issue.
+
+*   **Data Corruption in Log Files (`track_history.json`, `can_log.json`):**
+    *   **Symptom:** Numeric values in the JSON log files appear as massive, incorrect numbers.
+    *   **Cause:** Passing non-standard numeric types (like `numpy.float64` or C-style `doubles`) between processes or to the `json.dumps()` function can cause corruption.
+    *   **Solution:** The entire data pipeline now explicitly casts all numeric values to a standard Python `float()` at every stage: when sharing data between processes, when interpolating values, and before writing to a JSON file. This ensures data integrity.
+
+## 9. Changelog
+
+This section highlights recent key improvements and bug fixes.
+
+*   **CAN Data Integrity:**
+    *   **Fix (Part 19):** Resolved a critical bug where the `can_log.json` file was being corrupted. The issue was caused by writing C-style `double` data types directly to JSON. The fix involves casting the value to a standard Python `float` before serialization.
+    *   **Fix (Part 18):** Addressed data corruption in the final `track_history.json` caused by `numpy.interp` returning a `numpy.float64`. The interpolated value is now cast to a standard Python `float`.
+    *   **Fix (Part 17):** Corrected a data corruption issue that occurred when passing CAN signal timestamps (`numpy.float64`) between processes. All parts of the signal (value and timestamp) are now cast to `float` before being put in the shared dictionary.
+
+*   **Algorithm and Data Fusion:**
+    *   **Fix (Part 17):** The `estimatedAcceleration_mps2` is now correctly calculated and logged. The ego-motion estimator now returns the final, corrected value from its EKF.
+    *   **Feature (Part 16):** The `EstimatedGrade_Est_Deg` (road grade) signal is now fully integrated into the vehicle dynamics model.
+    *   **Fix (Part 15):** The `ETS_MOT_ShaftTorque_Est_Nm` (torque) signal is now correctly used by the tracking algorithm, and the calculated acceleration is properly saved.
+
+*   **System Stability and Usability:**
+    *   **Feature (Part 14):** Added a "No CAN" mode to allow the radar tracker to run without any CAN hardware.
+    *   **Fix (Part 13):** Implemented a `multiprocessing.Event` to synchronize the radar and CAN processes, fixing a race condition where the tracker would start before CAN data was available.
+    *   **Refactor (Part 12):** Overhauled the logging system to be centralized and more reliable, ensuring all logs are saved correctly to a timestamped directory.
+
+## 10. Testing
 
 A unit test is available to perform a sanity check on the CAN service without requiring any connected hardware.
 

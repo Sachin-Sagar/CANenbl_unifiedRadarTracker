@@ -5,6 +5,15 @@ import queue
 import json
 import time
 import struct
+import logging
+
+# Configure a basic logger for this module
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 LOG_ENTRY_FORMAT = struct.Struct('=dI32sd')
 
@@ -35,12 +44,17 @@ class LogWriter(threading.Thread):
 
                         sig_name = sig_name_bytes.strip(b'\x00').decode('utf-8')
                         
+                        logger.debug(f"Original value from shared memory: {value} (type: {type(value)})")
+                        casted_value = float(value)
+                        logger.debug(f"Casted value: {casted_value} (type: {type(casted_value)})")
+                        
                         log_entry = {
                             "timestamp": time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(ts)) + f".{int((ts % 1) * 1e6):06d}",
                             "message_id": f"0x{can_id:x}",
                             "signal": sig_name,
-                            "value": value
+                            "value": casted_value
                         }
+                        logger.debug(f"Final log entry: {log_entry}")
                         write_batch.append(log_entry)
 
                     except queue.Empty:
