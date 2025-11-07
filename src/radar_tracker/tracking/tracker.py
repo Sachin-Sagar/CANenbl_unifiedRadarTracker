@@ -48,13 +48,13 @@ class RadarTracker:
         if config.DEBUG_FLAGS.get('log_tracker_entry'):
             logger.debug(f"[TRACKER] Frame {self.frame_idx}: Entry egoVx = {current_frame.egoVx:.2f} m/s")
 
-        if config.COMPONENT_DEBUG_FLAGS.get('tracker_core'):
-            logger.debug(f"[TRACKER_CORE] Processing Frame: {self.frame_idx}, Delta_t: {delta_t:.4f}s")
-
         # Calculate delta_t
         delta_t = (current_frame.timestamp - self.last_timestamp_ms) / 1000.0 if self.frame_idx > 0 else 0.05
         if delta_t <= 0: delta_t = 0.05
         self.last_timestamp_ms = current_frame.timestamp
+
+        if config.COMPONENT_DEBUG_FLAGS.get('tracker_core'):
+            logger.debug(f"[TRACKER_CORE] Processing Frame: {self.frame_idx}, Delta_t: {delta_t:.4f}s")
 
         # --- CAN and IMU data is now part of current_frame ---
         # Default values are used if not provided by the adapter.

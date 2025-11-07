@@ -52,11 +52,16 @@ if __name__ == '__main__':
 
     class RadarProcessingFilter(logging.Filter):
         def filter(self, record):
-            return 'radar_tracker' in record.pathname and 'tracking' not in record.name
+            # Captures logs from radar_tracker's main_live.py and main_playback.py
+            return (
+                'radar_tracker/main_live.py' in record.pathname or 
+                'radar_tracker/main_playback.py' in record.pathname
+            )
 
     class TrackingFilter(logging.Filter):
         def filter(self, record):
-            return 'tracking' in record.name
+            # Captures logs from the tracking subdirectory
+            return 'radar_tracker/tracking' in record.pathname
 
     # Create handlers for each category
     can_handler = logging.FileHandler(os.path.join(console_out_dir, 'can_processing.log'), mode='w')

@@ -9,6 +9,20 @@ import platform
 # The CAN bitrate for the bus.
 CAN_BITRATE = 500000
 
+# --- Dual Pipeline Settings ---
+# Number of worker processes for decoding high-frequency (e.g., 10ms) signals.
+NUM_HIGH_FREQ_WORKERS = 2
+
+# Number of worker processes for decoding low-frequency (e.g., 100ms) signals.
+NUM_LOW_FREQ_WORKERS = 1
+
+# Max size of the queue for raw high-frequency CAN messages.
+HIGH_FREQ_QUEUE_SIZE = 4000
+
+# Max size of the queue for raw low-frequency CAN messages.
+LOW_FREQ_QUEUE_SIZE = 1000
+
+
 
 # --- General Settings ---
 # Set to True to enable verbose debug printing, False to disable.

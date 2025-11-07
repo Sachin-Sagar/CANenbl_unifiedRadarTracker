@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-11-07
+
+### Added
+
+- **Dual Pipeline CAN Processing:** Implemented a major architectural enhancement to the `can_logger_app` by introducing a dual-pipeline processing system. This separates the processing of high-frequency (e.g., 10ms) and low-frequency (e.g., 100ms) CAN signals into independent, parallel pipelines. This ensures that high-priority, time-sensitive signals are not delayed by bursts of low-priority messages, significantly improving the real-time reliability and performance of the CAN logger.
+    - The `can_handler` now acts as an intelligent dispatcher, sorting incoming messages into high and low-frequency queues.
+    - The `main` orchestrator in `can_logger_app` now creates and manages two separate worker pools for decoding, one for each pipeline.
+
+### Fixed
+
+- **`UnboundLocalError` in Tracker:** Resolved a crash in the `radar_tracker` caused by an `UnboundLocalError`. The `delta_t` variable was being used in a debug log message in `src/radar_tracker/tracking/tracker.py` before it was calculated. The fix involved moving the `delta_t` calculation to before the log message.
+
+## [1.2.15] - 2025-11-07
+
+### Fixed
+
+- **CAN Signal Filtering:** Resolved a bug where the CAN logger was processing and logging all signals for a given message ID if at least one signal from that message was in the master signal list. The decoding rule generation in `src/can_logger_app/utils.py` was made more robust to ensure that only signals explicitly listed in the `master_sigList.txt` are ever decoded and logged.
+
+### Changed
+
+- **Enhanced Logging Configuration:**
+    - **Enabled Tracking Logs:** Activated detailed, frame-by-frame debug logging for all major tracking components (`DBSCAN`, `RANSAC`, `JPDA`, `IMM Filter`, etc.) by default. This resolves the issue of the `tracking.log` file being empty and provides rich data for debugging the tracking algorithm's behavior.
+    - **Refined Log Categorization:** The logging filter for `radar_processing.log` was made more specific. It now exclusively captures logs related to the application's main setup and execution flow for live and playback modes, providing a cleaner log for initialization and high-level processes.
+
 ## [1.2.14] - 2025-11-06
 
 ### Fixed
@@ -27,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **CAN Log Summary Display:** The final CAN Data Logging Summary (`[LOGGED]` / `[UNSEEN]` status) is now displayed in the main application's console upon shutdown. Previously, this summary was only available in a separate log file for the `can_logger_app` process. This was achieved by passing the summary data from the child process back to the main process for printing.
 
-## [1.2.11] - 2025-11-06
+## [12.1.11] - 2025-11-06
 
 ### Fixed
 

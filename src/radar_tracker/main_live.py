@@ -9,6 +9,7 @@ import psutil
 import os
 import serial.tools.list_ports
 import platform
+import copy
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QThread, pyqtSignal, QObject
@@ -191,11 +192,14 @@ class RadarWorker(QObject):
             return {}
 
         # Create a deep copy of the shared data to avoid proxy issues
-        can_buffers = {}
-        if root_config.DEBUG_FLAGS.get('log_can_interpolation'):
-            logger.debug(f"[INTERPOLATION] Raw shared_live_can_data: {self.shared_live_can_data}")
-        for key, value in self.shared_live_can_data.items():
-            can_buffers[key] = list(value)
+        try:
+            # Convert the ManagerProxy to a regular dict and then deepcopy it
+            can_buffers = copy.deepcopy(dict(self.shared_live_can_data))
+            if root_config.DEBUG_FLAGS.get('log_can_interpolation'):
+                logger.debug(f"[INTERPOLATION] Copied shared data: {can_buffers}")
+        except Exception as e:
+            logger.error(f"[INTERPOLATION] Failed to deepcopy shared_live_can_data: {e}")
+            can_buffers = {}
         radar_posix_timestamp = radar_timestamp_ms / 1000.0
 
         if root_config.DEBUG_FLAGS.get('log_can_interpolation'):

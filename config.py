@@ -52,7 +52,7 @@ DEBUG_FLAGS = {
 
     # Logs the egoVx value at the entry point of the main tracker algorithm
     # in src/radar_tracker/tracking/tracker.py
-    'log_tracker_entry': False,
+    'log_tracker_entry': True,
 
     # Logs the egoVx value from the final history before it's saved to JSON
     # in src/radar_tracker/tracking/update_and_save_history.py
@@ -62,11 +62,11 @@ DEBUG_FLAGS = {
 # --- Component-Specific Debug Flags ---
 # Enable/disable verbose debug messages for specific tracking components.
 COMPONENT_DEBUG_FLAGS = {
-    'dbscan': False,
-    'ransac': False,
-    'tracker_core': False, # For general tracker logic in tracker.py
-    'jpda': False,
-    'imm_filter': False,
+    'dbscan': True,
+    'ransac': True,
+    'tracker_core': True, # For general tracker logic in tracker.py
+    'jpda': True,
+    'imm_filter': True,
     # Add other components as needed
 }
 

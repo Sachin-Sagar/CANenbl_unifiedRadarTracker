@@ -93,8 +93,9 @@ This project uses `uv` for fast dependency management, but standard `pip` also w
 *   **Clutter Rejection:** A dual-box (static and dynamic) filtering system intelligently rejects stationary clutter like guardrails while correctly tracking stopped vehicles.
 
 ### Robust CAN Integration
+*   **Dual Pipeline Processing:** The CAN logger uses a dual-pipeline architecture to process high-frequency (e.g., 10ms) and low-frequency (e.g., 100ms) signals in parallel. This ensures that time-sensitive, high-frequency data is not delayed by bursts of low-frequency messages, significantly improving real-time performance.
 *   **Multi-Process Architecture:** A dedicated process manages the CAN hardware, preventing resource conflicts and ensuring no data is lost. This process simultaneously logs all signals to a file while sharing live data with the radar tracker.
-*   **Dynamic Interface Selection:** Automatically configures the correct `python-can` backend based on user selection (PEAK/Kvaser) and OS (Windows/Linux).
+*   **Dynamic Interface Selection:** Automatically afigures the correct `python-can` backend based on user selection (PEAK/Kvaser) and OS (Windows/Linux).
 *   **Data Integrity:** All numeric data shared between processes is cast to standard Python `float` types, preventing the data corruption that can occur with `numpy` types in multiprocessing.
 *   **Synchronization:** A `multiprocessing.Event` ensures the radar tracker waits for the CAN logger to be ready, solving a critical race condition and guaranteeing that CAN data is available from the very first frame.
 *   **Process Health Monitoring:** The CAN logger process includes periodic health checks that log the status of its internal threads and worker processes at the `DEBUG` level, providing visibility for troubleshooting.

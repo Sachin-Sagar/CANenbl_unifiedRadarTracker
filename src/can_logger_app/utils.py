@@ -80,18 +80,17 @@ def precompile_decoding_rules(db, signals_to_monitor):
             message = db.get_message_by_frame_id(msg_id_int)
             
             rule_list = []
-            for signal_name in signal_names:
-                signal = message.get_signal_by_name(signal_name)
-                
-                rule = (
-                    signal.name,
-                    signal.is_signed,
-                    signal.start,
-                    signal.length,
-                    signal.scale,
-                    signal.offset
-                )
-                rule_list.append(rule)
+            for signal in message.signals:
+                if signal.name in signal_names:
+                    rule = (
+                        signal.name,
+                        signal.is_signed,
+                        signal.start,
+                        signal.length,
+                        signal.scale,
+                        signal.offset
+                    )
+                    rule_list.append(rule)
             
             if rule_list:
                 rules[msg_id_int] = rule_list

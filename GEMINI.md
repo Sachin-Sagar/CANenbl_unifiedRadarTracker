@@ -409,3 +409,23 @@ A two-part fix was implemented:
 2.  **Use Absolute Imports:** All relative imports within the `can_logger_app` were converted to absolute imports. For example, in `src/can_logger_app/utils.py` and `src/can_logger_app/main.py`, `from . import config` was changed to `from can_logger_app import config`. This ensures that the Python interpreter in the newly spawned process can reliably locate and load the necessary modules, preventing the `config` object from being `None`.
 
 This change resolves the startup crash on Windows and makes the module loading more robust and explicit.
+### Part 25: Feature Add - Dual Pipeline CAN Processing
+
+#### The Goal
+To improve the real-time performance of the `can_logger_app`, a new architecture was implemented to process high-frequency (e.g., 10ms) and low-frequency (e.g., 100ms) CAN signals in separate, parallel pipelines. This prevents bursts of low-frequency messages from delaying the processing of time-sensitive, high-frequency data.
+
+#### The Implementation
+1.  **Dual Queues:** In `src/can_logger_app/main.py`, two `multiprocessing.Queue` objects were created: `high_freq_raw_queue` and `low_freq_raw_queue`.
+2.  **Message Dispatcher:** The `CANReader` thread in `src/can_logger_app/can_handler.py` was modified to act as a dispatcher. It now sorts incoming CAN messages into the appropriate high or low-frequency queue based on the message ID.
+3.  **Separate Worker Pools:** The `main` function in `src/can_logger_app/main.py` now creates two distinct pools of worker processes. One pool reads from the high-frequency queue, and the other reads from the low-frequency queue. This ensures that high-priority signals are processed without contention.
+
+### Part 26: Bugfix - `UnboundLocalError` in Tracker
+
+#### The Problem
+The application would crash with an `UnboundLocalError: cannot access local variable 'delta_t' where it is not associated with a value` in the `radar_tracker`.
+
+#### The Cause
+In `src/radar_tracker/tracking/tracker.py`, a debug log message in the `process_frame` method was attempting to print the value of `delta_t` before the variable was calculated.
+
+#### The Solution
+The block of code responsible for calculating `delta_t` was moved to before the debug log message that uses it, ensuring the variable is always initialized before being accessed.

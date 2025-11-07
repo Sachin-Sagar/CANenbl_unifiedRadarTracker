@@ -130,15 +130,22 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
     print(f" -> Output will be saved to: '{output_filepath}'")
 
     # --- 2. Initialize Multiprocessing Components ---
-    print("\n[+] Initializing worker processes...")
+    print("\n[+] Initializing worker processes and dual pipelines...")
     manager = multiprocessing.Manager()
+
+    # --- DUAL PIPELINE: Create two separate queues for high and low frequency messages ---
+    high_freq_raw_queue = multiprocessing.Queue(maxsize=config.HIGH_FREQ_QUEUE_SIZE)
+    low_freq_raw_queue = multiprocessing.Queue(maxsize=config.LOW_FREQ_QUEUE_SIZE)
     
-    raw_mp_queue = multiprocessing.Queue(maxsize=4000)
+    # --- Shared queues for results and metadata ---
     log_queue = multiprocessing.Queue(maxsize=16384)
-    worker_signals_queue = multiprocessing.Queue() # New queue for worker signals
+    worker_signals_queue = multiprocessing.Queue()
     
     perf_tracker = manager.dict()
-    processes = []
+    
+    # --- DUAL PIPELINE: Create two lists to hold processes for each pipeline ---
+    high_freq_processes = []
+    low_freq_processes = []
     
     dispatcher_thread = None
     log_writer_thread = None
@@ -156,9 +163,10 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
         connection_event = threading.Event()
         
         print(" -> Initializing CAN data dispatcher (CANReader) thread...")
+        # --- DUAL PIPELINE: Pass both high and low frequency queues to the dispatcher ---
         dispatcher_thread = CANReader(
             bus_params=bus_params, 
-            data_queues={'high': raw_mp_queue, 'low': raw_mp_queue}, 
+            data_queues={'high': high_freq_raw_queue, 'low': low_freq_raw_queue}, 
             id_to_queue_map=id_to_queue_map, 
             perf_tracker=perf_tracker,
             connection_event=connection_event,
@@ -182,23 +190,37 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
         log_writer_thread.start()
         print(" -> Log writer thread started.")
 
-        num_processes = (os.cpu_count() or 2) - 1
-        print(f" -> Starting {num_processes} decoding processes...")
-        for i in range(num_processes):
+        # --- DUAL PIPELINE: Start the high-frequency worker pool ---
+        print(f" -> Starting {config.NUM_HIGH_FREQ_WORKERS} high-frequency decoding processes...")
+        for i in range(config.NUM_HIGH_FREQ_WORKERS):
             p = multiprocessing.Process(
                 target=processing_worker,
-                # MODIFIED: Pass the can_logger_ready event to the worker
-                args=(i, decoding_rules, raw_mp_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag, worker_signals_queue),
-                daemon=True
+                args=(i, decoding_rules, high_freq_raw_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag, worker_signals_queue),
+                daemon=True,
+                name=f"HighFreqWorker-{i}"
             )
-            processes.append(p)
+            high_freq_processes.append(p)
+            p.start()
+
+        # --- DUAL PIPELINE: Start the low-frequency worker pool ---
+        print(f" -> Starting {config.NUM_LOW_FREQ_WORKERS} low-frequency decoding processes...")
+        for i in range(config.NUM_LOW_FREQ_WORKERS):
+            p = multiprocessing.Process(
+                target=processing_worker,
+                args=(i + config.NUM_HIGH_FREQ_WORKERS, decoding_rules, low_freq_raw_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag, worker_signals_queue),
+                daemon=True,
+                name=f"LowFreqWorker-{i}"
+            )
+            low_freq_processes.append(p)
             p.start()
 
         print("\n[+] Logging data... Press Ctrl-C to stop.")
         last_check_time = time.time()
+        
+        all_processes = high_freq_processes + low_freq_processes
         while not (shutdown_flag and shutdown_flag.is_set()):
             # --- Health Checks for all processes and threads ---
-            if not all(p.is_alive() for p in processes):
+            if not all(p.is_alive() for p in all_processes):
                 logger.error("One or more worker processes have died unexpectedly. Shutting down.")
                 break
             if not dispatcher_thread.is_alive():
@@ -213,8 +235,8 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
             if current_time - last_check_time >= 5.0: # Log status every 5 seconds
                 logger.debug(f"[HEALTH CHECK] CANReader thread alive: {dispatcher_thread.is_alive()}")
                 logger.debug(f"[HEALTH CHECK] LogWriter thread alive: {log_writer_thread.is_alive()}")
-                for i, p in enumerate(processes):
-                    logger.debug(f"[HEALTH CHECK] Worker process {i} (PID: {p.pid}) alive: {p.is_alive()}")
+                for i, p in enumerate(all_processes):
+                    logger.debug(f"[HEALTH CHECK] Worker process {i} (PID: {p.pid}, Name: {p.name}) alive: {p.is_alive()}")
                 last_check_time = current_time
 
             time.sleep(1) # Main loop check interval
@@ -261,18 +283,26 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
                 print(" -> Warning: CANReader thread did not terminate gracefully.")
 
         print(" -> Stopping worker processes...")
-        for _ in processes:
+        # --- DUAL PIPELINE: Signal both high and low frequency queues to stop ---
+        for _ in high_freq_processes:
             try:
-                raw_mp_queue.put(None, timeout=0.1) # Signal workers to exit
+                high_freq_raw_queue.put(None, timeout=0.1)
             except Exception:
-                pass 
+                pass
+        for _ in low_freq_processes:
+            try:
+                low_freq_raw_queue.put(None, timeout=0.1)
+            except Exception:
+                pass
 
-        for p in processes:
+        # --- DUAL PIPELINE: Join all processes from both pools ---
+        all_processes = high_freq_processes + low_freq_processes
+        for p in all_processes:
             p.join(timeout=2)
         
-        for p in processes:
+        for p in all_processes:
             if p.is_alive():
-                print(f" -> Warning: Worker process {p.pid} did not exit gracefully. Terminating.")
+                print(f" -> Warning: Worker process {p.pid} ({p.name}) did not exit gracefully. Terminating.")
                 p.terminate()
                 p.join()
 
