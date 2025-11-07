@@ -40,39 +40,37 @@ def select_com_port():
     Prompts the user to select a serial port for the radar.
     This function is called only when live mode is active.
     """
-    if sys.platform == "win32":
-        # You may need to adjust this default for your setup
-        default_port = 'COM11'
-        ports = serial.tools.list_ports.comports()
-        if not any(p.device == default_port for p in ports):
-            logger.warning(f"Default port {default_port} not found.")
-        return default_port
-        
-    elif sys.platform == "linux":
-        ports = serial.tools.list_ports.comports()
-        if not ports:
-            logger.error("No serial ports found. Please ensure the radar is connected and you have the necessary permissions (e.g., member of 'dialout' group).")
-            return None
-        elif len(ports) == 1:
-            selected_port = ports[0].device
-            logger.info(f"Automatically selected serial port: {selected_port}")
-            return selected_port
-        else:
-            logger.info("Available serial ports:")
-            for i, port in enumerate(ports):
-                logger.info(f"  {i}: {port.device}")
-            while True:
-                try:
-                    choice = int(input("Please select the serial port for the radar: "))
-                    if 0 <= choice < len(ports):
-                        return ports[choice].device
-                    else:
-                        logger.info("Invalid choice.")
-                except ValueError:
-                    logger.info("Invalid input.")
-    else:
-        logger.error(f"Unsupported OS '{sys.platform}' detected. Please set COM port manually.")
+    ports = serial.tools.list_ports.comports()
+
+    if not ports:
+        logger.error("No serial ports found. Please ensure the radar is connected.")
+        if sys.platform == "linux":
+            logger.error("Ensure you have the necessary permissions (e.g., member of 'dialout' group).")
         return None
+
+    if len(ports) == 1:
+        selected_port = ports[0].device
+        logger.info(f"Automatically selected serial port: {selected_port}")
+        return selected_port
+
+    # This block now runs for both Windows and Linux if multiple ports are found
+    logger.info("Available serial ports:")
+    for i, port in enumerate(ports):
+        # Provide more info on Windows, as device names can be generic
+        if sys.platform == "win32":
+            logger.info(f"  {i}: {port.device} - {port.description}")
+        else:
+            logger.info(f"  {i}: {port.device}")
+
+    while True:
+        try:
+            choice = int(input("Please select the serial port for the radar: "))
+            if 0 <= choice < len(ports):
+                return ports[choice].device
+            else:
+                logger.info("Invalid choice. Please select a number from the list.")
+        except ValueError:
+            logger.info("Invalid input. Please enter a number.")
 
 class RadarWorker(QObject):
     """
