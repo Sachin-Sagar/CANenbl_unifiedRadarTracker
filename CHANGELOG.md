@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2025-11-10
+
+### Added
+- **Test Suite Restructuring:** The `tests` folder has been completely restructured for improved organization and maintainability.
+    - All test-related utility scripts and fixed modules are now located in `tests/lib/`.
+    - Individual test cases are organized under `tests/test_cases/`.
+    - Test data files are consolidated in `tests/test_data/`.
+    - Documentation specific to the test suite is now in `tests/documentation/`.
+    - A main test runner script, `tests/tests_main.py`, has been introduced to discover and execute all tests within the `test_cases` directory.
+- **Log Parsing Utility Script:** A new utility script, `tests/lib/parse_log_to_json.py`, was created to parse `tests/test_data/2w_sample.log` and extract signals defined in `tests/test_data/tst_input/master_sigList.txt`, writing the output to `tests/parsed_signals.json`.
+- **Test Documentation:** Comprehensive documentation for the test suite has been added:
+    - `tests/documentation/tests.md`: Details the debugging process and fixes applied to the test suite.
+    - `tests/documentation/tests_readme.md`: Provides instructions on how to run tests, describes the purpose of each test, and explains the new folder structure.
+
+### Fixed
+- **`test_can_log_playback.py` Failures:** Resolved multiple issues preventing `test_can_log_playback.py` from passing reliably.
+    - Corrected a bug where `deque` modifications within `multiprocessing.Manager.dict` were not propagated, leading to empty signal buffers. A fixed `LiveCANManager` (`tests/lib/live_can_manager_fixed.py`) was introduced to address this.
+    - Updated test paths and imports to align with the new test folder structure.
+- **`test_can_service.py` Failures:** Addressed several bugs in `test_can_service.py` that caused it to fail.
+    - Corrected the dummy DBC CAN ID to be a valid extended frame ID (`2295333120`) as required by the `cantools` library.
+    - Replaced `unittest.mock.MagicMock` objects with actual `can.Message` objects in `mock_bus.recv.side_effect` to ensure pickleability for inter-process communication.
+    - Added a missing `import can` statement.
+    - Refactored the test to use a mocked `config` module, resolving `AttributeError: module 'config' has no attribute 'DEBUG_PRINTING'` by ensuring `src/can_service/utils.py` correctly accesses a patched configuration during testing.
+    - Updated test paths and imports to align with the new test folder structure.
+
 ## [1.3.1] - 2025-11-10
 
 ### Fixed
