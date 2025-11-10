@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.3.3] - 2025-11-10
 
 ### Fixed
+- **Empty Log Files on Windows:** Fixed a bug where `tracking.log` and `radar_processing.log` were empty when running on Windows. The logging filters in `main.py` were using hardcoded forward-slash paths, which failed to match on Windows. The filters now normalize path separators, making them platform-independent.
+- **Missing Low-Frequency CAN Signals:** Resolved an issue where low-frequency (100ms) CAN signals were not being logged. The worker processes were not being given specialized signal lists. The fix ensures that low-frequency workers are now passed only the set of low-frequency signals they need to monitor, making the dual-pipeline processing more efficient and correcting the logic error.
 - **CAN Signal Data Corruption:** Resolved a critical bug where CAN signal values (e.g., `ETS_MOT_ShaftTorque_Est_Nm`) were being incorrectly decoded and logged as static or erroneous values. The issue stemmed from a manual decoding implementation that incorrectly assumed little-endian byte order, conflicting with the big-endian (Motorola) format specified in the DBC file. The fix involved:
     - Replacing the manual decoding logic in `src/can_logger_app/data_processor.py` with the `cantools` library's `db.decode_message()` function, which correctly handles all DBC-defined decoding rules, including byte order.
     - Updating `src/can_logger_app/main.py` to pass the `cantools` database object (`db`) and the set of signals to monitor directly to the worker processes, eliminating the need for pre-compiled decoding rules.

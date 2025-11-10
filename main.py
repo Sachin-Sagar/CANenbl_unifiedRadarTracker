@@ -48,20 +48,23 @@ if __name__ == '__main__':
     # Define filters for different log categories
     class CANFilter(logging.Filter):
         def filter(self, record):
-            return 'can_logger_app' in record.pathname
+            normalized_path = record.pathname.replace(os.sep, '/')
+            return 'can_logger_app' in normalized_path
 
     class RadarProcessingFilter(logging.Filter):
         def filter(self, record):
             # Captures logs from radar_tracker's main_live.py and main_playback.py
+            normalized_path = record.pathname.replace(os.sep, '/')
             return (
-                'radar_tracker/main_live.py' in record.pathname or 
-                'radar_tracker/main_playback.py' in record.pathname
+                'radar_tracker/main_live.py' in normalized_path or 
+                'radar_tracker/main_playback.py' in normalized_path
             )
 
     class TrackingFilter(logging.Filter):
         def filter(self, record):
             # Captures logs from the tracking subdirectory
-            return 'radar_tracker/tracking' in record.pathname
+            normalized_path = record.pathname.replace(os.sep, '/')
+            return 'radar_tracker/tracking' in normalized_path
 
     # Create handlers for each category
     can_handler = logging.FileHandler(os.path.join(console_out_dir, 'can_processing.log'), mode='w')

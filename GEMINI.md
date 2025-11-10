@@ -185,7 +185,34 @@ The manual, error-prone decoding logic was replaced with the robust and reliable
 2.  **`src/can_logger_app/main.py`:** The call to `utils.precompile_decoding_rules` was removed. Instead, the `db` (cantools database object) and the `all_monitoring_signals` set are now passed directly to the `processing_worker` instances. This provides the workers with the necessary context for correct decoding.
 3.  **`src/can_logger_app/utils.py`:** The `precompile_decoding_rules` function, which became obsolete, was removed to maintain code cleanliness.
 
-This comprehensive fix ensures that all CAN signals are now decoded accurately according to the DBC file, resolving the data corruption and providing reliable data for both logging and the radar tracking algorithm.
+This approach bypasses the problematic proprietary driver layer entirely, providing a stable and well-supported connection to the CAN bus. The application's dynamic interface selection was designed specifically to handle this scenario.
+
+### Part 29: Bugfix - Empty Log Files on Windows
+
+#### The Problem
+When running the application on Windows, the `tracking.log` and `radar_processing.log` files were consistently empty, despite the application generating relevant log messages. This made debugging difficult and obscured the internal workings of the radar tracker.
+
+#### The Diagnosis
+The issue was traced to the logging filters defined in `main.py`. These filters categorize log messages based on their `record.pathname` attribute. However, the filters were using hardcoded forward slashes (`/`) in their path comparisons (e.g., `'radar_tracker/tracking' in record.pathname`). On Windows, file paths use backslashes (`\`). Consequently, the filters failed to match any log records originating from modules within the `radar_tracker` directory, leading to empty log files.
+
+#### The Solution
+The logging filters in `main.py` were updated to normalize the `record.pathname` by replacing platform-specific path separators (`os.sep`) with forward slashes (`/`) before performing the comparison. This ensures that the filters correctly identify and categorize log messages regardless of the operating system, allowing `tracking.log` and `radar_processing.log` to be populated as intended.
+
+### Part 30: Bugfix - Missing Low-Frequency CAN Signals
+
+#### The Problem
+During live testing, low-frequency (100ms cycle time) CAN signals were consistently marked as "UNSEEN" in the final CAN data logging summary, indicating they were never processed or logged by the `can_logger_app`. High-frequency (10ms) signals, however, were logged correctly.
+
+#### The Diagnosis
+The `can_logger_app` employs a dual-pipeline architecture with separate worker pools for high-frequency and low-frequency messages. While the `CANReader` correctly dispatched messages to their respective queues, the `processing_worker` instances were not specialized. Both high-frequency and low-frequency workers were being passed the `all_monitoring_signals` set, meaning each worker was attempting to process *all* signals, regardless of its assigned queue. This inefficiency, particularly for the low-frequency workers, likely led to them being starved of processing time or simply not correctly identifying and logging their specific signals within the general pool.
+
+#### The Solution
+The `src/can_logger_app/main.py` file was modified to specialize the worker processes:
+1.  Two distinct sets of signal names were created: `high_freq_monitored_signals` and `low_freq_monitored_signals`.
+2.  The `multiprocessing.Process` calls for the high-frequency worker pool were updated to pass only `high_freq_monitored_signals`.
+3.  The `multiprocessing.Process` calls for the low-frequency worker pool were updated to pass only `low_freq_monitored_signals`.
+
+This ensures that each worker pool is responsible only for its designated set of signals, making the dual-pipeline processing truly efficient and resolving the issue of missing low-frequency CAN signals.
 
 ### Part 10: Kvaser PermissionError on Windows
 

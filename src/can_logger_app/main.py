@@ -121,6 +121,8 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
     if id_to_queue_map is None: return
 
     all_monitoring_signals = {s for group in (high_freq_signals, low_freq_signals) for sig_set in group.values() for s in sig_set}
+    high_freq_monitored_signals = {s for sig_set in high_freq_signals.values() for s in sig_set}
+    low_freq_monitored_signals = {s for sig_set in low_freq_signals.values() for s in sig_set}
     
     # Decoding rules are no longer pre-compiled; the db object will be used directly in workers.
     
@@ -194,7 +196,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
         for i in range(config.NUM_HIGH_FREQ_WORKERS):
             p = multiprocessing.Process(
                 target=processing_worker,
-                args=(i, db, all_monitoring_signals, high_freq_raw_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag, worker_signals_queue),
+                args=(i, db, high_freq_monitored_signals, high_freq_raw_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag, worker_signals_queue),
                 daemon=True,
                 name=f"HighFreqWorker-{i}"
             )
@@ -206,7 +208,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
         for i in range(config.NUM_LOW_FREQ_WORKERS):
             p = multiprocessing.Process(
                 target=processing_worker,
-                args=(i + config.NUM_HIGH_FREQ_WORKERS, db, all_monitoring_signals, low_freq_raw_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag, worker_signals_queue),
+                args=(i + config.NUM_HIGH_FREQ_WORKERS, db, low_freq_monitored_signals, low_freq_raw_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag, worker_signals_queue),
                 daemon=True,
                 name=f"LowFreqWorker-{i}"
             )
