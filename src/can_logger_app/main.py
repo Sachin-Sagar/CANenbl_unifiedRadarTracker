@@ -47,9 +47,9 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
     import cantools
     from can_logger_app import config
     from can_logger_app import utils
-    from .can_handler import CANReader
-    from .data_processor import processing_worker, LOG_ENTRY_FORMAT
-    from .log_writer import LogWriter
+    from can_logger_app.can_handler import CANReader
+    from can_logger_app.data_processor import processing_worker, LOG_ENTRY_FORMAT
+    from can_logger_app.log_writer import LogWriter
     # --------------------------------------------------------
 
     import signal

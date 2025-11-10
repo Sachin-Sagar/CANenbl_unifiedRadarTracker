@@ -122,11 +122,11 @@ if __name__ == '__main__':
         
         can_logger_process = None
         try:
-            init_gpio()
-            logger.info("Waiting for switch ON...")
-            wait_for_switch_on()
-            logger.info("Switch is ON!")
-            turn_on_led()
+            # init_gpio()
+            # logger.info("Waiting for switch ON...")
+            # wait_for_switch_on()
+            # logger.info("Switch is ON!")
+            # turn_on_led()
 
             # Start the CAN logger in a separate process for live mode
             if mode == '1' and can_interface is not None:
@@ -138,8 +138,8 @@ if __name__ == '__main__':
                 can_logger_process.start()
 
                 # Start the stop signal checker in a separate thread
-                stop_thread = threading.Thread(target=check_for_switch_off, args=(shutdown_flag,))
-                stop_thread.start()
+                # stop_thread = threading.Thread(target=check_for_switch_off, args=(shutdown_flag,))
+                # stop_thread.start()
 
             # Launch the appropriate mode
             if mode == '1':
@@ -153,8 +153,8 @@ if __name__ == '__main__':
         finally:
             shutdown_flag.set() # Signal all processes to shutdown
 
-            if 'stop_thread' in locals() and stop_thread.is_alive():
-                stop_thread.join(timeout=2)
+            # if 'stop_thread' in locals() and stop_thread.is_alive():
+            #     stop_thread.join(timeout=2)
 
             if can_logger_process and can_logger_process.is_alive():
                 logger.info("Signaling CAN logger to shut down...")
@@ -164,10 +164,10 @@ if __name__ == '__main__':
                     can_logger_process.terminate()
                     can_logger_process.join()
 
-            if platform.system() == "Linux":
-                turn_off_led()
+            # if platform.system() == "Linux":
+            #     turn_off_led()
             
-            cleanup_gpio()
+            # cleanup_gpio()
             logger.info("Application shut down.")
 
     else: # Not on Linux

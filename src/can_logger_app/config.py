@@ -28,6 +28,7 @@ LOW_FREQ_QUEUE_SIZE = 1000
 # Set to True to enable verbose debug printing, False to disable.
 # --- Debugging --- #
 DEBUG_PRINTING = True
+BUTTON_PIN = 21
 
 
 # --- File and Directory Paths ---

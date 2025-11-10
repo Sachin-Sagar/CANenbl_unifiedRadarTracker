@@ -1,7 +1,7 @@
 
 import RPi.GPIO as GPIO
 import time
-from config import BUTTON_PIN
+from can_logger_app.config import BUTTON_PIN
 
 def init_gpio():
     """Initializes GPIO pins for button."""

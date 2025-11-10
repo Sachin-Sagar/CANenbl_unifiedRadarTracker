@@ -30,13 +30,13 @@ try:
 
     print("\nDEBUG: --- About to import custom modules ---")
     
-    from . import config
+    from can_logger_app import config
     print("DEBUG: Imported 'config.py'")
     
-    import utils
+    from can_logger_app import utils
     print("DEBUG: Imported 'utils.py'")
     
-    from can_handler import CANReader
+    from can_logger_app.can_handler import CANReader
     print("DEBUG: Imported 'CANReader' from can_handler.py")
 
 except Exception as e:

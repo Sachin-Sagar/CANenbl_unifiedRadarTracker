@@ -3,7 +3,7 @@
 import queue
 import threading
 import time
-from . import config  # <-- This import is safe
+from can_logger_app import config
 
 # --- MODIFICATION: 'import can' has been REMOVED from the top ---
 
@@ -46,12 +46,15 @@ class CANReader(threading.Thread):
                 msg = self.bus.recv(timeout=0.001) # Use a small timeout
                 
                 if msg:
+                    self.messages_received += 1
+                    msg_id_int = msg.arbitration_id
+                    queue_name = self.id_to_queue_map.get(msg_id_int)
+
                     if config.DEBUG_PRINTING:
                         if queue_name:
-                            print(f"DEBUG [CANReader]: Received message: {msg}")
                             print(f"DEBUG [CANReader]: Match found! ID: {msg_id_int} (0x{msg_id_int:x}) -> Queue: '{queue_name}'")
-                        else:
-                            print(f"DEBUG [CANReader]: No match for ID: {msg_id_int} (0x{msg_id_int:x})")
+                        # else:
+                        #     print(f"DEBUG [CANReader]: No match for ID: {msg_id_int} (0x{msg_id_int:x})")
                     
                     if queue_name:
                         try:
