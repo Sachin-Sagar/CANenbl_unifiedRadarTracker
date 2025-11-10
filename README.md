@@ -181,7 +181,8 @@ This design isolates the hardware-specific CAN operations from the main applicat
 This section highlights recent key improvements and bug fixes.
 
 *   **CAN Data Integrity:**
-    *   **Fix (Part 19):** Resolved a critical bug where the `can_log.json` file was being corrupted. The issue was caused by writing C-style `double` data types directly to JSON. The fix involves casting the value to a standard Python `float` before serialization.
+    *   **Fix (Part 28):** Resolved a critical bug where CAN signal values were being incorrectly decoded due to an incorrect byte order assumption in the manual decoding logic. The fix involved replacing the manual decoding with `cantools.db.decode_message()`, updating worker arguments, and removing obsolete functions.
+*   **Fix (Part 19):** Resolved a critical bug where the `can_log.json` file was being corrupted. The issue was caused by writing C-style `double` data types directly to JSON. The fix involves casting the value to a standard Python `float` before serialization.
     *   **Fix (Part 18):** Addressed data corruption in the final `track_history.json` caused by `numpy.interp` returning a `numpy.float64`. The interpolated value is now cast to a standard Python `float`.
     *   **Fix (Part 17):** Corrected a data corruption issue that occurred when passing CAN signal timestamps (`numpy.float64`) between processes. All parts of the signal (value and timestamp) are now cast to `float` before being put in the shared dictionary.
 

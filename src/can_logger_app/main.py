@@ -122,8 +122,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
 
     all_monitoring_signals = {s for group in (high_freq_signals, low_freq_signals) for sig_set in group.values() for s in sig_set}
     
-    print(" -> Pre-compiling decoding rules...")
-    decoding_rules = utils.precompile_decoding_rules(db, {**high_freq_signals, **low_freq_signals})
+    # Decoding rules are no longer pre-compiled; the db object will be used directly in workers.
     
     output_filepath = os.path.join(target_output_dir, f"can_log_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json")
     os.makedirs(target_output_dir, exist_ok=True)
@@ -195,7 +194,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
         for i in range(config.NUM_HIGH_FREQ_WORKERS):
             p = multiprocessing.Process(
                 target=processing_worker,
-                args=(i, decoding_rules, high_freq_raw_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag, worker_signals_queue),
+                args=(i, db, all_monitoring_signals, high_freq_raw_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag, worker_signals_queue),
                 daemon=True,
                 name=f"HighFreqWorker-{i}"
             )
@@ -207,7 +206,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
         for i in range(config.NUM_LOW_FREQ_WORKERS):
             p = multiprocessing.Process(
                 target=processing_worker,
-                args=(i + config.NUM_HIGH_FREQ_WORKERS, decoding_rules, low_freq_raw_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag, worker_signals_queue),
+                args=(i + config.NUM_HIGH_FREQ_WORKERS, db, all_monitoring_signals, low_freq_raw_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag, worker_signals_queue),
                 daemon=True,
                 name=f"LowFreqWorker-{i}"
             )

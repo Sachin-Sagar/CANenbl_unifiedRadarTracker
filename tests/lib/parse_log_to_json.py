@@ -96,38 +96,7 @@ def load_signals_to_monitor(file_path):
     
     return signals_to_monitor
 
-def precompile_decoding_rules(db, signals_to_monitor):
-    """
-    Pre-compiles the decoding rules for faster processing.
-    Returns a dictionary of {msg_id_int: [(signal_name, is_signed, start, length, scale, offset), ...]}
-    """
-    rules = {}
-    for msg_id_int, signal_names in signals_to_monitor.items():
-        try:
-            message = db.get_message_by_frame_id(msg_id_int)
-            
-            rule_list = []
-            for signal_name in signal_names:
-                signal = message.get_signal_by_name(signal_name)
-                
-                rule = (
-                    signal.name,
-                    signal.is_signed,
-                    signal.start,
-                    signal.length,
-                    signal.scale,
-                    signal.offset
-                )
-                rule_list.append(rule)
-            
-            if rule_list:
-                rules[msg_id_int] = rule_list
 
-        except KeyError:
-            print(f"Warning: Message ID {msg_id_int} (0x{msg_id_int:x}) from signal list not found in DBC file.")
-            continue
-            
-    return rules
 
 # --- Main Script Logic ---
 def main():
@@ -143,43 +112,41 @@ def main():
         return
 
     # 2. Load signals to monitor
-    signals_to_monitor = load_signals_to_monitor(SIGNAL_LIST_PATH)
-    if not signals_to_monitor:
+    signals_to_monitor_by_id = load_signals_to_monitor(SIGNAL_LIST_PATH)
+    if not signals_to_monitor_by_id:
         print("No signals to monitor. Exiting.")
         return
-
-    # 3. Precompile decoding rules
-    decoding_rules = precompile_decoding_rules(db, signals_to_monitor)
-    if not decoding_rules:
-        print("No decoding rules compiled. Exiting.")
-        return
+        
+    # Create a flat set of all signal names to monitor
+    all_signals_to_monitor = set()
+    for signal_set in signals_to_monitor_by_id.values():
+        all_signals_to_monitor.update(signal_set)
 
     parsed_signals_data = []
 
-    # 4. Process log file
+    # 3. Process log file
     for msg in parse_busmaster_log(LOG_FILE_PATH):
-        if msg.arbitration_id in decoding_rules:
-            rules = decoding_rules[msg.arbitration_id]
-            data_int = int.from_bytes(msg.data, byteorder='little')
-            
-            for name, is_signed, start, length, scale, offset in rules:
-                shifted = data_int >> start
-                mask = (1 << length) - 1
-                raw_value = shifted & mask
-
-                if is_signed:
-                    if raw_value & (1 << (length - 1)):
-                        raw_value -= (1 << length)
-
-                physical_value = (raw_value * scale) + offset
+        # Check if the message ID is one we are interested in
+        if msg.arbitration_id in signals_to_monitor_by_id:
+            try:
+                # Use cantools to decode the message
+                decoded_signals = db.decode_message(msg.arbitration_id, msg.data)
                 
-                parsed_signals_data.append({
-                    "timestamp": msg.timestamp,
-                    "signal_name": name,
-                    "value": float(physical_value) # Ensure native Python float
-                })
+                # Filter for the signals we want to log
+                for signal_name, physical_value in decoded_signals.items():
+                    if signal_name in all_signals_to_monitor:
+                        parsed_signals_data.append({
+                            "timestamp": msg.timestamp,
+                            "signal_name": signal_name,
+                            "value": float(physical_value) # Ensure native Python float
+                        })
+            except Exception as e:
+                # This can happen if a message ID is in our list but not fully defined in the DBC
+                # for the given data, or other decoding errors.
+                # print(f"Warning: Could not decode message ID 0x{msg.arbitration_id:x}: {e}")
+                continue
     
-    # 5. Write to JSON file
+    # 4. Write to JSON file
     try:
         with open(OUTPUT_JSON_FILE, 'w') as f:
             json.dump(parsed_signals_data, f, indent=4)

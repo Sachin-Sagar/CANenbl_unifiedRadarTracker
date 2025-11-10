@@ -67,36 +67,3 @@ def load_signals_to_monitor(file_path):
         print(f"Warning: No valid signals were loaded from '{file_path}'.")
         
     return high_freq_signals, low_freq_signals, id_to_queue_map
-
-def precompile_decoding_rules(db, signals_to_monitor):
-    """
-    Pre-compiles the decoding rules for faster processing.
-    ---
-    MODIFIED: Now expects message IDs as INTEGERS in the input dictionary.
-    """
-    rules = {}
-    for msg_id_int, signal_names in signals_to_monitor.items():
-        try:
-            message = db.get_message_by_frame_id(msg_id_int)
-            
-            rule_list = []
-            for signal in message.signals:
-                if signal.name in signal_names:
-                    rule = (
-                        signal.name,
-                        signal.is_signed,
-                        signal.start,
-                        signal.length,
-                        signal.scale,
-                        signal.offset
-                    )
-                    rule_list.append(rule)
-            
-            if rule_list:
-                rules[msg_id_int] = rule_list
-
-        except KeyError:
-            print(f"Warning: Message ID {msg_id_int} (0x{msg_id_int:x}) from signal list not found in DBC file.")
-            continue
-            
-    return rules

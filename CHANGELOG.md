@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2025-11-10
+
+### Fixed
+- **CAN Signal Data Corruption:** Resolved a critical bug where CAN signal values (e.g., `ETS_MOT_ShaftTorque_Est_Nm`) were being incorrectly decoded and logged as static or erroneous values. The issue stemmed from a manual decoding implementation that incorrectly assumed little-endian byte order, conflicting with the big-endian (Motorola) format specified in the DBC file. The fix involved:
+    - Replacing the manual decoding logic in `src/can_logger_app/data_processor.py` with the `cantools` library's `db.decode_message()` function, which correctly handles all DBC-defined decoding rules, including byte order.
+    - Updating `src/can_logger_app/main.py` to pass the `cantools` database object (`db`) and the set of signals to monitor directly to the worker processes, eliminating the need for pre-compiled decoding rules.
+    - Removing the now-obsolete `precompile_decoding_rules` function from `src/can_logger_app/utils.py`.
+
 ## [1.3.2] - 2025-11-10
 
 ### Added

@@ -171,7 +171,21 @@ The most reliable solution is to **use PCAN hardware with the standard SocketCAN
 2.  **Interface Selection:** When prompted by the application, select `PEAK (pcan)`. The application will automatically use the stable `socketcan` backend, which is integrated directly into the Linux kernel.
 3.  **Kernel Drivers:** The necessary `peak_usb` kernel module is included in most modern Linux distributions, including Debian/Raspbian, making setup much simpler than with Kvaser's proprietary drivers.
 
-This approach bypasses the problematic proprietary driver layer entirely, providing a stable and well-supported connection to the CAN bus. The application's dynamic interface selection was designed specifically to handle this scenario.
+### Part 28: Bugfix - Persistent CAN Signal Data Corruption
+
+#### The Problem
+Despite previous attempts to resolve CAN data corruption, signals like `ETS_MOT_ShaftTorque_Est_Nm` were still being logged with static or erroneous values in `can_log.json` and passed to the live radar tracker. This indicated a fundamental issue in the decoding process within the `can_logger_app`.
+
+#### The Diagnosis
+A thorough investigation revealed that the `src/can_logger_app/data_processor.py` module was using a manual bit-shifting and masking approach to decode CAN signals. This manual implementation incorrectly assumed a "little-endian" byte order for all messages. However, the `VCU.dbc` file specifies "big-endian" (Motorola) byte order for many critical signals, including `ETS_MOT_ShaftTorque_Est_Nm`. This mismatch in byte order interpretation was the root cause of the persistent data corruption.
+
+#### The Solution
+The manual, error-prone decoding logic was replaced with the robust and reliable `cantools` library's built-in decoding functionality:
+1.  **`src/can_logger_app/data_processor.py`:** The manual bit-manipulation code was removed. The `processing_worker` function was updated to use `db.decode_message(msg['arbitration_id'], msg['data'])`. This function correctly interprets the DBC file's specifications, including byte order, and returns a dictionary of decoded signals. The worker then filters these decoded signals to log only those specified in the `master_sigList.txt`.
+2.  **`src/can_logger_app/main.py`:** The call to `utils.precompile_decoding_rules` was removed. Instead, the `db` (cantools database object) and the `all_monitoring_signals` set are now passed directly to the `processing_worker` instances. This provides the workers with the necessary context for correct decoding.
+3.  **`src/can_logger_app/utils.py`:** The `precompile_decoding_rules` function, which became obsolete, was removed to maintain code cleanliness.
+
+This comprehensive fix ensures that all CAN signals are now decoded accurately according to the DBC file, resolving the data corruption and providing reliable data for both logging and the radar tracking algorithm.
 
 ### Part 10: Kvaser PermissionError on Windows
 
