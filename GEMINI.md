@@ -429,3 +429,30 @@ In `src/radar_tracker/tracking/tracker.py`, a debug log message in the `process_
 
 #### The Solution
 The block of code responsible for calculating `delta_t` was moved to before the debug log message that uses it, ensuring the variable is always initialized before being accessed.
+
+### Part 27: Bugfix - Debug Message Spam and Static CAN Values
+
+#### The Problem
+Two distinct but related issues were identified in the `can_logger_app`:
+1.  **Debug Message Spam:** The `can_logger_console.log` was being flooded with debug messages for *all* received CAN message IDs, including those not relevant to the `master_sigList.txt`. This made it difficult to diagnose actual processing issues.
+2.  **Static CAN Values in `can_log.json`:** Despite raw CAN data changing, the decoded signal values in `can_log.json` remained constant. This indicated a failure in the signal decoding process.
+
+#### The Diagnosis
+1.  **Debug Message Spam:** A review of `src/can_logger_app/can_handler.py` and `src/can_logger_app/data_processor.py` revealed that debug print statements were placed *before* the filtering logic that determined if a message ID was relevant. Thus, every message received from the CAN bus or queue was being logged, regardless of whether it was destined for processing.
+2.  **Static CAN Values:** A thorough investigation of `src/can_logger_app/data_processor.py` uncovered a critical **indentation error**. The `if msg['arbitration_id'] in decoding_rules:` block and the subsequent `for` loop responsible for iterating through signals and calculating `physical_value` were incorrectly indented. This caused the entire signal decoding logic to be skipped after the first iteration (or never executed at all if no initial valid message was processed), leading to stale or default values being written to `can_log.json`.
+
+#### The Solution
+1.  **Debug Message Spam Fix:**
+    *   In `src/can_logger_app/can_handler.py`, the `print(f"DEBUG [CANReader]: Received message: {msg}")` statement was moved inside the `if queue_name:` block.
+    *   In `src/can_logger_app/data_processor.py`, the `logger.debug(f"[WORKER {worker_id}] Processing raw CAN message: {msg}")` statement was moved inside the `if msg['arbitration_id'] in decoding_rules:` block.
+    These changes ensure that debug messages are only generated for CAN messages that are actually relevant and being processed.
+2.  **Static CAN Values Fix:**
+    *   The indentation of the `if msg['arbitration_id'] in decoding_rules:` block and all its nested code (including the signal decoding `for` loop) in `src/can_logger_app/data_processor.py` was corrected. This ensures that the decoding logic is executed for every relevant CAN message.
+
+#### Verification Tool: `playback_test.py`
+To provide a robust and repeatable method for verifying these fixes (and future changes to the CAN processing pipeline), a new test script, `playback_test.py`, was developed and refined:
+*   **Initial Version:** The first version of `playback_test.py` was designed to read a `can_log.json` file and feed its (dummy) raw data through the pipeline. This was useful for verifying pipeline integrity but not full decoding correctness.
+*   **Refined Version:** The script was significantly enhanced to read a `raw_can.log` file (assuming `candump` format) from an external tool. It now parses the actual raw CAN data (timestamp, arbitration ID, and data bytes) and feeds it into the `can_logger_app`'s processing pipeline. This allows for a true end-to-end verification of the decoding logic.
+*   **User Experience:** The script was also improved to prompt the user for the `raw_can.log` file path if not provided as a command-line argument, and to introduce a small `time.sleep` for every log line to simulate realistic message arrival rates, even for ignored messages.
+
+These changes collectively resolve the logging and data integrity issues, and provide a powerful tool for future testing.

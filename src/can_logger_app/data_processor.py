@@ -37,15 +37,16 @@ def processing_worker(worker_id, decoding_rules, raw_queue, results_queue, perf_
             if msg is None:
                 break
 
-            if config.DEBUG_PRINTING:
-                logger.debug(f"[WORKER {worker_id}] Processing raw CAN message: {msg}")
-
-            start_time = time.perf_counter()
-
             if msg['arbitration_id'] in decoding_rules:
+
+                if config.DEBUG_PRINTING:
+
+                    logger.debug(f"[WORKER {worker_id}] Processing raw CAN message: {msg}")
+
                 rules = decoding_rules[msg['arbitration_id']]
+
                 data_int = int.from_bytes(msg['data'], byteorder='little')
-                
+    
                 for name, is_signed, start, length, scale, offset in rules:
                     shifted = data_int >> start
                     mask = (1 << length) - 1

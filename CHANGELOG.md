@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2025-11-10
+
+### Fixed
+- **Static Values in `can_log.json`:** Resolved a critical bug where decoded CAN signal values in `can_log.json` were static and unchanging. The root cause was a major indentation error in `src/can_logger_app/data_processor.py` that caused the signal decoding loop to be skipped after the first iteration. The indentation has been corrected, ensuring every incoming CAN message is now properly decoded.
+- **Debug Message Spam:** Fixed an issue where debug logs (`can_logger_console.log`) would show messages for all received CAN IDs, including those not in `master_sigList.txt`. The debug print statements in `can_handler.py` and `data_processor.py` were moved inside the filtering logic, ensuring that only messages being actively processed are logged.
+
+### Added
+- **Raw CAN Playback Test Script:** Added a new test script, `playback_test.py`, to facilitate end-to-end testing of the `can_logger_app` pipeline. This script reads a pre-recorded raw CAN log file (in `candump` format), simulates the CAN bus by feeding the raw messages into the processing pipeline, and generates a new `can_log.json`. This allows for robust verification of the decoding logic without requiring live hardware.
+
+### Changed
+- **Improved Playback Test Script:** The `playback_test.py` script was enhanced to be more user-friendly. It now prompts the user for the path to the `raw_can.log` file if it is not provided as a command-line argument. It also correctly simulates message timing for both processed and ignored messages.
+
 ## [1.3.0] - 2025-11-07
 
 ### Added

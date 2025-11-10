@@ -100,6 +100,8 @@ This project uses `uv` for fast dependency management, but standard `pip` also w
 *   **Synchronization:** A `multiprocessing.Event` ensures the radar tracker waits for the CAN logger to be ready, solving a critical race condition and guaranteeing that CAN data is available from the very first frame.
 *   **Process Health Monitoring:** The CAN logger process includes periodic health checks that log the status of its internal threads and worker processes at the `DEBUG` level, providing visibility for troubleshooting.
 *   **Full Data Integration:** The tracker's vehicle dynamics model now correctly uses live CAN torque, gear, and road grade signals to calculate a physics-based acceleration, which is correctly logged in the final output.
+*   **Reliable CAN Data Decoding:** Resolved an issue where decoded CAN signal values in `can_log.json` were static due to an indentation error in the processing logic. The decoding now functions correctly for every message.
+*   **Clean Debug Logging:** Eliminated debug message spam in `can_logger_console.log` by ensuring that debug messages are only generated for CAN messages that are actively being processed and are relevant to the configured signal list.
 
 ### Data Logging
 *   **Organized Output:** All logs from a session (CAN, radar, track history, console) are saved into a single, timestamped directory (e.g., `output/YYYYMMDD_HHMMSS/`).
