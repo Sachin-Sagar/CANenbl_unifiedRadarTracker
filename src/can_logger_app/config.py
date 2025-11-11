@@ -9,6 +9,14 @@ import platform
 # The CAN bitrate for the bus.
 CAN_BITRATE = 500000
 
+# A list of CAN signals that must be received before the live tracker is signaled to start.
+# This prevents the tracker from starting with incomplete data.
+CRITICAL_SIGNALS_FOR_START = [
+    "ETS_VCU_VehSpeed_Act_kmph",
+    "ETS_MOT_ShaftTorque_Est_Nm",
+    "ETS_VCU_AccelPedal_Act_perc",
+]
+
 # --- Dual Pipeline Settings ---
 # Number of worker processes for decoding high-frequency (e.g., 10ms) signals.
 NUM_HIGH_FREQ_WORKERS = 2

@@ -214,6 +214,35 @@ The `src/can_logger_app/main.py` file was modified to specialize the worker proc
 
 This ensures that each worker pool is responsible only for its designated set of signals, making the dual-pipeline processing truly efficient and resolving the issue of missing low-frequency CAN signals.
 
+### Part 31: Feature Add - Automated Live Data Pipeline Test
+
+#### The Goal
+To create a robust, automated test for the live CAN-to-tracker data pipeline to ensure data integrity and prevent regressions, specifically addressing potential corruption of CAN signal values as they flow from the CAN logger to the radar tracker and into the final `track_history.json`.
+
+#### The Implementation
+A new test file, `tests/test_cases/test_live_data_pipeline.py`, was created to simulate the interaction between the `can_logger_app` and the `radar_tracker`.
+
+1.  **Mock CAN Logger Process (`mock_can_logger_process`):**
+    *   This function simulates the `can_logger_app` by running in a separate `multiprocessing.Process`.
+    *   Instead of reading from a log file, it continuously writes predefined, constant values (e.g., `50.0 kmph` for `ETS_VCU_VehSpeed_Act_kmph` and `10.0 Nm` for `ETS_MOT_ShaftTorque_Est_Nm`) along with a current timestamp into a `multiprocessing.Manager.dict()` (the `shared_live_can_data`).
+    *   It immediately sets a `multiprocessing.Event` (`can_logger_ready`) to signal that data is available.
+    *   It updates the shared dictionary every 10ms until a `shutdown_flag` is set.
+2.  **Mock Radar Tracker Process (`mock_radar_tracker_process`):**
+    *   This function simulates the `radar_tracker` by running in another `multiprocessing.Process`.
+    *   It initializes the `RadarTracker` and waits for the `can_logger_ready` event, ensuring the CAN data stream has started.
+    *   It generates dummy radar frames with incrementing timestamps.
+    *   For each dummy frame, it retrieves the latest CAN signal values from the `shared_live_can_data`.
+    *   It then calls the actual `adapt_frame_data_to_fhist` and `tracker.process_frame` functions from the `src/radar_tracker` module, passing the dummy radar frame and the retrieved CAN data.
+    *   After processing a fixed number of frames, it saves the resulting `fhist_history` to a `track_history.json` file in a timestamped output directory.
+    *   It sets the `shutdown_flag` to signal the mock CAN logger to terminate.
+3.  **Test Orchestration (`TestLiveDataPipeline.test_data_integrity_in_live_pipeline`):**
+    *   The main test method sets up the `multiprocessing.Manager`, shared dictionary, and events.
+    *   It starts both mock processes and waits for them to complete.
+    *   **Verification:** It loads the generated `track_history.json` and asserts that the `canVehSpeed_kmph` and `shaftTorque_Nm` fields in the final frames match the predefined constant values, confirming that the data was correctly transferred and processed without corruption.
+4.  **Multiprocessing Fix:**
+    *   To prevent child processes from re-executing the test suite (which can lead to crashes or unexpected behavior), the `unittest.main()` call in `test_live_data_pipeline.py` was guarded with `if __name__ == '__main__':`.
+    *   Additionally, `multiprocessing.set_start_method('spawn')` was explicitly called to ensure consistent and safer process creation across different operating systems.
+
 ### Part 10: Kvaser PermissionError on Windows
 
 #### The Problem
@@ -481,6 +510,25 @@ The `main.py` script's Linux execution path was hardcoded to wait for a GPIO pin
 
 #### The Solution
 The GPIO-related function calls (`init_gpio`, `wait_for_switch_on`, `check_for_switch_off`, etc.) in `main.py` were commented out. This temporarily bypasses the physical switch requirement, allowing the application to start immediately on a Raspberry Pi, similar to how it runs on Windows. This change unblocks development while preserving the GPIO code for future use.
+
+### Part 32: Bugfix - Initial Data Corruption Race Condition
+
+#### The Problem
+The `track_history.json` file contained incorrect, non-physical "garbage" values for all CAN-derived signals (e.g., `canVehSpeed_kmph`, `shaftTorque_Nm`, `egoVelocity`) for the first ~10 frames (Frame 0 to Frame 9). This indicated that the radar tracking algorithm was starting its processing with incomplete or uninitialized CAN data.
+
+#### The Diagnosis
+A detailed analysis revealed a race condition in the synchronization between the `can_logger_app` and the `radar_tracker`. While the `radar_tracker` correctly waited for a `can_logger_ready` event, this event was being set prematurely by the `can_logger_app`.
+
+The `processing_worker` function in `src/can_logger_app/data_processor.py` was setting the `can_logger_ready` event immediately after processing the *very first* CAN signal and placing it into the `shared_live_can_data` dictionary. At this point, the dictionary contained data for only one signal, leaving all other critical signals unpopulated. When the `radar_tracker` unblocked, it attempted to read from this incomplete shared data structure, leading to the observed garbage values for the missing signals.
+
+#### The Solution
+The synchronization logic was refined to ensure the `can_logger_ready` event is set only after a minimum set of critical CAN signals has been received and populated in the `shared_live_can_data` dictionary.
+
+1.  **Defined Critical Signals:** A new configuration list, `CRITICAL_SIGNALS_FOR_START`, was added to `src/can_logger_app/config.py`. This list specifies the essential signals required for the tracker's initial ego-motion calculations:
+    *   `ETS_VCU_VehSpeed_Act_kmph`
+    *   `ETS_MOT_ShaftTorque_Est_Nm`
+    *   `ETS_VCU_AccelPedal_Act_perc` (Updated from `EstimatedGrade_Est_Deg` per user request)
+2.  **Modified `processing_worker`:** The logic in `src/can_logger_app/data_processor.py` was updated. The `can_logger_ready.set()` call is now guarded by a check that verifies if all signals listed in `config.CRITICAL_SIGNALS_FOR_START` are present as keys in the `live_data_dict`. This ensures that the `radar_tracker` only proceeds when a meaningful baseline of CAN data is available, preventing initial data corruption.
 
 ## Development Rules
 - When working in the `tests` folder, do not edit any file outside of it.

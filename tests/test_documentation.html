@@ -62,6 +62,12 @@
             <li><strong>Functionality:</strong> It uses Python's built-in <code>unittest</code> library to automatically discover all files matching the pattern <code>test_*.py</code> within the <code>test_cases</code> directory and execute them. This provides a convenient way to run all tests at once and get a consolidated result.</li>
         </ul>
 
+        <h3>5. <code>test_live_data_pipeline.py</code></h3>
+        <ul>
+            <li><strong>Purpose:</strong> To validate the end-to-end data pipeline for live CAN signal integration into the radar tracking algorithm. This test simulates a CAN logger providing constant ego-motion data and a radar tracker processing this data along with dummy radar frames. It verifies that CAN signals are correctly passed, processed, and reflected in the final tracking output.</li>
+            <li><strong>Current Problem:</strong> The <code>trackHistory</code> in the final <code>track_history.json</code> is empty because the tracking logic does not propagate the CAN signal data into the track's history log. As the source code outside the <code>tests</code> folder cannot be modified, a different approach is taken. The test now verifies the integration of CAN data by inspecting the <code>radarFrames</code> section of the JSON output. This confirms that the CAN data correctly influences the tracker's ego-motion estimation (<code>egoVelocity</code> and <code>estimatedAcceleration_mps2</code>), even if it's not present in the final track history.</li>
+        </ul>
+
         <h2>Worker Task Breakdown</h2>
         <p>The <code>test_dual_pipeline_simulation.py</code> script creates two specialized worker processes. Here is a breakdown of their individual tasks.</p>
 

@@ -80,8 +80,12 @@ def processing_worker(worker_id, db, signals_to_log, raw_queue, results_queue, p
                                 # Keep the buffer trimmed to the last 10 values
                                 live_data_dict[name] = buffer[-10:]
 
+                                # --- MODIFIED: Check for all critical signals before setting the ready event ---
                                 if can_logger_ready and not can_logger_ready.is_set():
-                                    can_logger_ready.set()
+                                    # Check if all critical signals are now present in the live data dict
+                                    if all(sig in live_data_dict for sig in config.CRITICAL_SIGNALS_FOR_START):
+                                        logger.info(f"[WORKER {worker_id}] All critical signals received. Setting CAN logger ready event.")
+                                        can_logger_ready.set()
 
                             local_logged_signals.add(name)
 

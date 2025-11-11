@@ -1,0 +1,61 @@
+The Problem: Incorrect Data in track_history.json
+
+The final output file, track_history.json, begins with incorrect, non-physical "garbage" values for all CAN-derived signals for the first 10 frames (Frame 0 to Frame 9).
+
+For example, in frameIdx: 0, the file logs:
+
+    canVehSpeed_kmph: -3522163993.92981
+
+    shaftTorque_Nm: -3532766082.6996927
+
+    egoVelocity: [-978378887.2027249, null]
+
+The Root Cause: A Data Initialization Race Condition
+
+The logs indicate this is a race condition at application startup. The tracking process starts and processes radar frames before the CAN logger process has successfully read, decoded, and shared the first valid CAN messages.
+
+Because the tracking process has no valid CAN data to read for these initial frames, it reads from an uninitialized memory buffer, which contains the large, negative "garbage" values you see.
+
+Log-by-Log Evidence
+
+Here is the step-by-step proof found in the logs:
+
+1. The Tracking Log (tracking.log)
+
+This log shows the consequence of the race condition.
+
+    At its very first entry (12:19:53,300), the tracking core's RANSAC estimator receives the garbage value:
+
+        [RANSAC_EST] Input can_veh_speed_kmph: -3522163993.93
+
+    Because this speed is invalid, the Extended Kalman Filter (EKF) fails to compute a valid state, resulting in nan (Not a Number):
+
+        [RANSAC_EST] EKF Corrected State (x_corr): [nan nan nan nan nan]
+
+    This nan value is why the final egoVelocity in track_history.json is logged with a null for the Y-component.
+
+2. The Raw CAN Log (can_log_2025-11-11_12-19-46.json)
+
+This log proves that the actual data from the vehicle was normal.
+
+    While the tracking log was processing garbage data, the raw CAN log was recording sensible, low-speed values from the very beginning. The first timestamp in the file shows a vehicle speed of 1.5 km/h:
+
+        {"timestamp": "2025-11-11T06:49:47.414438", ... "signal": "ETS_VCU_VehSpeed_Act_kmph", "value": 1.5}
+
+    This confirms the CAN data itself was good; the tracking process just hadn't received it yet.
+
+3. The System Stabilizes
+
+The logs show that by Frame 10, the race condition is over, and the valid CAN data stream has "caught up" with the tracking process.
+
+    In track_history.json: At frameIdx: 10, the values suddenly become correct and physical:
+
+        canVehSpeed_kmph: 3.1
+
+        shaftTorque_Nm: 0.1700000000000017
+
+    In tracking.log: At the corresponding timestamp (12:19:53,804), the RANSAC estimator confirms it is now receiving the correct data:
+
+        [RANSAC_EST] Input can_veh_speed_kmph: 3.10
+
+In summary, the issue is not that the CAN data was bad, but that the tracking process started processing frames before the first valid CAN data was available to it, causing it to read and log uninitialized memory for the first 10 frames.
