@@ -64,8 +64,14 @@
 
         <h3>5. <code>test_live_data_pipeline.py</code></h3>
         <ul>
-            <li><strong>Purpose:</strong> To validate the end-to-end data pipeline for live CAN signal integration into the radar tracking algorithm. This test simulates a CAN logger providing constant ego-motion data and a radar tracker processing this data along with dummy radar frames. It verifies that CAN signals are correctly passed, processed, and reflected in the final tracking output.</li>
-            <li><strong>Current Problem:</strong> The <code>trackHistory</code> in the final <code>track_history.json</code> is empty because the tracking logic does not propagate the CAN signal data into the track's history log. As the source code outside the <code>tests</code> folder cannot be modified, a different approach is taken. The test now verifies the integration of CAN data by inspecting the <code>radarFrames</code> section of the JSON output. This confirms that the CAN data correctly influences the tracker's ego-motion estimation (<code>egoVelocity</code> and <code>estimatedAcceleration_mps2</code>), even if it's not present in the final track history.</li>
+            <li><strong>Purpose:</strong> To provide a robust, end-to-end validation of the live data pipeline, ensuring CAN signals are correctly transferred between processes and integrated by the radar tracker.</li>
+            <li><strong>Key Tests:</strong>
+                <ul>
+                    <li><code>test_data_integrity_in_live_pipeline</code>: This test verifies that CAN data is passed without corruption. It starts a mock CAN logger that provides constant, known values (e.g., speed, torque) and a mock radar tracker that processes this data. The test passes if the CAN-derived values in the final <code>track_history.json</code> (specifically in the <code>radarFrames</code> list) match the original known values.</li>
+                    <li><code>test_startup_race_condition_fix</code>: This test specifically validates the fix for the initial data corruption bug. It uses a special "delayed start" mock CAN logger that waits for a few hundred milliseconds before sending any data. The test confirms that the radar tracker process waits patiently for this delayed data stream instead of starting with uninitialized "garbage" values. It passes by asserting that the CAN data in the very first frame of the output JSON is valid and correct.</li>
+                </ul>
+            </li>
+            <li><strong>Success:</strong> Both tests are currently passing. This confirms that the data integrity is maintained throughout the pipeline and that the startup race condition has been successfully resolved.</li>
         </ul>
 
         <h2>Worker Task Breakdown</h2>

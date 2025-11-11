@@ -93,15 +93,11 @@ This project uses `uv` for fast dependency management, but standard `pip` also w
 *   **Clutter Rejection:** A dual-box (static and dynamic) filtering system intelligently rejects stationary clutter like guardrails while correctly tracking stopped vehicles.
 
 ### Robust CAN Integration
-*   **Dual Pipeline Processing:** The CAN logger uses a dual-pipeline architecture to process high-frequency (e.g., 10ms) and low-frequency (e.g., 100ms) signals in parallel. This ensures that time-sensitive, high-frequency data is not delayed by bursts of low-frequency messages, significantly improving real-time performance.
-*   **Multi-Process Architecture:** A dedicated process manages the CAN hardware, preventing resource conflicts and ensuring no data is lost. This process simultaneously logs all signals to a file while sharing live data with the radar tracker.
-*   **Dynamic Interface Selection:** Automatically afigures the correct `python-can` backend based on user selection (PEAK/Kvaser) and OS (Windows/Linux).
-*   **Data Integrity:** All numeric data shared between processes is cast to standard Python `float` types, preventing the data corruption that can occur with `numpy` types in multiprocessing.
-*   **Synchronization:** A `multiprocessing.Event` ensures the radar tracker waits for the CAN logger to be ready, solving a critical race condition and guaranteeing that CAN data is available from the very first frame.
+*   **Synchronization:** A `multiprocessing.Event` ensures the radar tracker waits for the CAN logger to be ready, but critically, this event is now only set after a predefined set of *critical CAN signals* (e.g., speed, torque, acceleration pedal position) have been received and populated in the shared dictionary. This solves a critical race condition and guarantees that the radar tracker has a complete set of initial CAN data from its very first frame.
+*   **Reliable CAN Data Decoding:** Resolved a critical bug where CAN signal values were being incorrectly decoded due to an incorrect byte order assumption in the manual decoding logic. The fix involved replacing the manual decoding with `cantools.db.decode_message()`, ensuring robust and accurate interpretation of the DBC file's specifications.
 *   **Process Health Monitoring:** The CAN logger process includes periodic health checks that log the status of its internal threads and worker processes at the `DEBUG` level, providing visibility for troubleshooting.
-*   **Full Data Integration:** The tracker's vehicle dynamics model now correctly uses live CAN torque, gear, and road grade signals to calculate a physics-based acceleration, which is correctly logged in the final output.
-*   **Reliable CAN Data Decoding:** Resolved an issue where decoded CAN signal values in `can_log.json` were static due to an indentation error in the processing logic. The decoding now functions correctly for every message.
-*   **Clean Debug Logging:** Eliminated debug message spam in `can_logger_console.log` by ensuring that debug messages are only generated for CAN messages that are actively being processed and are relevant to the configured signal list.
+*   **Dual Pipeline Processing:** The CAN logger uses a dual-pipeline architecture to process high-frequency (e.g., 10ms) and low-frequency (e.g., 100ms) signals in parallel. This ensures that time-sensitive, high-frequency data is not delayed by bursts of low-frequency messages, significantly improving real-time performance.
+*   **Clean Debug Logging:** Eliminated debug message spam in `can_logger_console.log` by specializing worker processes for high-frequency and low-frequency signals. This ensures that debug messages are only generated for CAN messages that are actively being processed and are relevant to the configured signal list.
 
 ### Data Logging
 *   **Organized Output:** All logs from a session (CAN, radar, track history, console) are saved into a single, timestamped directory (e.g., `output/YYYYMMDD_HHMMSS/`).
@@ -181,8 +177,9 @@ This design isolates the hardware-specific CAN operations from the main applicat
 This section highlights recent key improvements and bug fixes.
 
 *   **CAN Data Integrity:**
+    *   **Fix (Part 32 - Initial Data Corruption Race Condition):** Resolved a critical race condition at application startup where the radar tracker would process initial frames with uninitialized or "garbage" CAN data. The fix ensures the tracker waits for a predefined set of critical CAN signals (speed, torque, acceleration pedal position) to be present in the shared data dictionary before proceeding, guaranteeing valid CAN data from the very first frame.
     *   **Fix (Part 28):** Resolved a critical bug where CAN signal values were being incorrectly decoded due to an incorrect byte order assumption in the manual decoding logic. The fix involved replacing the manual decoding with `cantools.db.decode_message()`, updating worker arguments, and removing obsolete functions.
-*   **Fix (Part 19):** Resolved a critical bug where the `can_log.json` file was being corrupted. The issue was caused by writing C-style `double` data types directly to JSON. The fix involves casting the value to a standard Python `float` before serialization.
+    *   **Fix (Part 19):** Resolved a critical bug where the `can_log.json` file was being corrupted. The issue was caused by writing C-style `double` data types directly to JSON. The fix involves casting the value to a standard Python `float` before serialization.
     *   **Fix (Part 18):** Addressed data corruption in the final `track_history.json` caused by `numpy.interp` returning a `numpy.float64`. The interpolated value is now cast to a standard Python `float`.
     *   **Fix (Part 17):** Corrected a data corruption issue that occurred when passing CAN signal timestamps (`numpy.float64`) between processes. All parts of the signal (value and timestamp) are now cast to `float` before being put in the shared dictionary.
 

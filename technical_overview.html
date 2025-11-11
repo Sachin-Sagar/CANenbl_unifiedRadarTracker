@@ -238,7 +238,7 @@
             </ul>
 
             <h3>4. Solving the Live Data Race Condition</h3>
-            <p>A critical challenge in multi-process communication is ensuring data is available before it's requested. We solved a race condition where the radar tracker would start before any CAN data was ready.</p>
+            <p>A critical challenge in multi-process communication is ensuring data is available before it's requested. We solved a race condition where the radar tracker would start processing frames with incomplete or uninitialized CAN data.</p>
             <div class="infographic-grid">
                 <div class="infographic-col">
                     <h3 style="text-align: center; color: var(--accent-red);">Problem: Race Condition</h3>
@@ -255,17 +255,17 @@
                     <div class="infographic-box">
                         <h4>3. Shared Dictionary</h4>
                         <p>Radar tracker reads the dictionary.</p>
-                        <div class="infographic-data bad">Result: {} (Empty)</div>
+                        <div class="infographic-data bad">Result: {} (Empty or Incomplete)</div>
                     </div>
                      <div class="infographic-arrow">&darr;</div>
                     <div class="infographic-box">
                         <h4>4. CAN Logger Process</h4>
                         <p>...finishes initializing and writes first CAN message.</p>
-                        <p><strong>Too late!</strong></p>
+                        <p><strong>Too late! Tracker has already processed garbage data.</strong></p>
                     </div>
                 </div>
                 <div class="infographic-col">
-                    <h3 style="text-align: center; color: var(--accent-green);">Solution: Synchronization Event</h3>
+                    <h3 style="text-align: center; color: var(--accent-green);">Solution: Synchronization with Critical Signals</h3>
                     <div class="infographic-box">
                         <h4>1. CAN Logger Process</h4>
                         <p>Starts initializing...</p>
@@ -278,19 +278,19 @@
                     <div class="infographic-arrow">&darr;</div>
                     <div class="infographic-box">
                         <h4>3. CAN Logger Process</h4>
-                        <p>...finishes initializing, processes first message, and writes to the dictionary.</p>
-                        <div class="infographic-data good">Data: {'VehSpeed': 50.0}</div>
+                        <p>...decodes messages and populates the shared dictionary.</p>
+                        <div class="infographic-data good">Data: {'VehSpeed': 3.1, 'Torque': 0.17, ...}</div>
                     </div>
                     <div class="infographic-arrow">&darr;</div>
                     <div class="infographic-box">
                         <h4>4. CAN Logger Process</h4>
-                        <p>Sets the <code>can_logger_ready</code> event.</p>
+                        <p>Checks if all <strong>critical signals</strong> (Speed, Torque, Accel Pedal) are present in the dictionary. Once they are, it sets the <code>can_logger_ready</code> event.</p>
                     </div>
                     <div class="infographic-arrow">&darr;</div>
                     <div class="infographic-box">
                         <h4>5. Radar Tracker Process</h4>
                         <p>Receives signal and reads the dictionary.</p>
-                        <div class="infographic-data good">Result: {'VehSpeed': 50.0}</div>
+                        <div class="infographic-data good">Result: A complete initial dataset.</div>
                     </div>
                 </div>
             </div>

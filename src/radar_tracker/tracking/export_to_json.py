@@ -125,7 +125,7 @@ def create_visualization_data(all_tracks, fhist, params):
     # --- 2. Process Tracks (allTracks) ---
     tracks_list = []
     for track in all_tracks:
-        track_export_obj = {'id': track.get('id'), 'isConfirmed': track.get('isConfirmed', False), 'historyLog': []}
+        track_export_obj = {'id': track.get('id'), 'isConfirmed': track.get('isConfirmed', False), 'trackHistory': []}
         if len(all_tracks) > 1:
             track_export_obj['ttcCategoryTimeline'] = []
 
@@ -143,7 +143,7 @@ def create_visualization_data(all_tracks, fhist, params):
                     # Use the _sanitize_for_json helper for the angle as well
                     'ellipseAngle': _sanitize_for_json(log_entry.get('orientationAngle'))
                 }
-                track_export_obj['historyLog'].append(clean_log_entry)
+                track_export_obj['trackHistory'].append(clean_log_entry)
                 
                 if 'ttcCategoryTimeline' in track_export_obj:
                     if log_entry.get('ttcCategory') is not None and log_entry.get('frameIdx') is not None:

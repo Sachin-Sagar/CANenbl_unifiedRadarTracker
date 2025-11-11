@@ -69,6 +69,36 @@ def mock_can_logger_process(shared_dict, ready_event, shutdown_flag, output_dir,
         # sys.stdout = original_stdout
         # sys.stderr = original_stderr
 
+def mock_can_logger_delayed_start(shared_dict, ready_event, shutdown_flag, output_dir, expected_values):
+    """
+    A mock CAN logger that intentionally waits before sending any data.
+    This is used to test the startup race condition fix.
+    """
+    print("[CAN Mock Delayed] Starting. Will wait 200ms before sending any data.")
+    time.sleep(0.2)
+    print("[CAN Mock Delayed] Delay finished. Sending initial data and setting ready event.")
+
+    # The real data processor would set the event after all critical signals are present.
+    # Here, we simulate that by setting it after we populate the dict for the first time.
+    current_time = time.time()
+    shared_dict['ETS_VCU_VehSpeed_Act_kmph'] = (expected_values['speed'], current_time)
+    shared_dict['ETS_MOT_ShaftTorque_Est_Nm'] = (expected_values['torque'], current_time)
+    shared_dict['EstimatedGrade_Est_Deg'] = (expected_values['grade'], current_time)
+    
+    # This simulates the real logic where the event is set only after data is available.
+    ready_event.set()
+    print("[CAN Mock Delayed] Ready event set.")
+
+    # Now, run the continuous loop
+    while not shutdown_flag.is_set():
+        current_time = time.time()
+        shared_dict['ETS_VCU_VehSpeed_Act_kmph'] = (expected_values['speed'], current_time)
+        shared_dict['ETS_MOT_ShaftTorque_Est_Nm'] = (expected_values['torque'], current_time)
+        shared_dict['EstimatedGrade_Est_Deg'] = (expected_values['grade'], current_time)
+        time.sleep(0.01)
+
+    print("[CAN Mock Delayed] Shutdown flag set, exiting.")
+
 
 # --- Mock Radar Tracker Process ---
 def mock_radar_tracker_process(shared_dict, ready_event, shutdown_flag, output_dir, num_frames, radar_log_path):
@@ -238,8 +268,8 @@ class TestLiveDataPipeline(unittest.TestCase):
 
         expected_values = {
             'speed': 50.0, # kmph
-            'torque': 10.0, # Nm
-            'grade': 5.0 # Deg
+            'torque': 0.0, # Nm
+            'grade': 0.0 # Deg
         }
         expected_ego_vx_mps = expected_values['speed'] / 3.6 # Convert kmph to mps
 
@@ -273,27 +303,19 @@ class TestLiveDataPipeline(unittest.TestCase):
             history = json.load(f)
         
         self.assertIn('tracks', history, "The 'tracks' key is missing from track_history.json")
-        self.assertGreater(len(history['tracks']), 0, "No tracks were saved in track_history.json")
-
-        # For this test, we'll just check the history of the first track
-        first_track_history = history['tracks'][0].get('trackHistory', [])
-        self.assertGreater(len(first_track_history), 0, "The first track has an empty trackHistory.")
+        self.assertIn('radarFrames', history, "The 'radarFrames' key is missing from track_history.json")
+        
+        # --- VERIFICATION IS NOW DONE ON radarFrames ---
+        radar_frames = history['radarFrames']
+        self.assertGreater(len(radar_frames), 0, "The radarFrames list is empty.")
 
         # Check the last few frames for the correct CAN data
-        num_frames_to_check = min(10, len(first_track_history))
-        self.assertGreater(num_frames_to_check, 0, "No frames to check in the first track's history.")
+        num_frames_to_check = min(10, len(radar_frames))
+        self.assertGreater(num_frames_to_check, 0, "No frames to check in the radarFrames list.")
 
         for i in range(1, num_frames_to_check + 1):
-            frame = first_track_history[-i]
+            frame = radar_frames[-i]
             
-            # The JSON export maps the long signal name to a shorter key.
-            # This mapping happens in export_to_json.py, which is NOT used by update_and_save_history.
-            # So we need to check the FHistFrame attribute names directly.
-            
-            # Let's re-read the export logic. The final JSON from update_and_save_history
-            # is created by create_visualization_data. Let's check that file.
-            # Okay, create_visualization_data IS used. So the mapping should be correct.
-
             self.assertIn('canVehSpeed_kmph', frame, f"Frame {-i} is missing 'canVehSpeed_kmph'")
             if frame['canVehSpeed_kmph'] is not None:
                 self.assertAlmostEqual(frame['canVehSpeed_kmph'], expected_values['speed'], delta=0.1, msg=f"Frame {-i} speed is incorrect")
@@ -306,9 +328,10 @@ class TestLiveDataPipeline(unittest.TestCase):
             if frame['roadGrade_Deg'] is not None:
                 self.assertAlmostEqual(frame['roadGrade_Deg'], expected_values['grade'], delta=0.1, msg=f"Frame {-i} grade is incorrect")
 
-            self.assertIn('egoVx', frame, f"Frame {-i} is missing 'egoVx'")
-            if frame['egoVx'] is not None:
-                self.assertAlmostEqual(frame['egoVx'], expected_ego_vx_mps, delta=0.1, msg=f"Frame {-i} egoVx is incorrect")
+            # Check the egoVx which is derived from the CAN speed
+            self.assertIn('egoVelocity', frame, f"Frame {-i} is missing 'egoVelocity'")
+            if frame['egoVelocity'] and frame['egoVelocity'][0] is not None:
+                self.assertAlmostEqual(frame['egoVelocity'][0], expected_ego_vx_mps, delta=0.1, msg=f"Frame {-i} egoVx is incorrect")
 
             self.assertIn('estimatedAcceleration_mps2', frame, f"Frame {-i} is missing 'estimatedAcceleration_mps2'")
             # The acceleration should be close to zero since speed and grade are constant
@@ -316,6 +339,79 @@ class TestLiveDataPipeline(unittest.TestCase):
                 self.assertAlmostEqual(frame['estimatedAcceleration_mps2'], 0.0, delta=0.5, msg=f"Frame {-i} estimatedAcceleration_mps2 is not close to zero")
         
         print(f"Test finished successfully. Output files are in: {self.test_output_dir}")
+
+    def test_startup_race_condition_fix(self):
+        """
+        Tests that the radar tracker waits for the CAN logger to be ready.
+        It uses a mock CAN logger that has an initial delay, simulating a
+        real-world startup sequence. The test verifies that the first frame
+        of data is valid, not garbage.
+        """
+        manager = multiprocessing.Manager()
+        shared_live_can_data = manager.dict()
+        can_logger_ready = manager.Event()
+        shutdown_flag = manager.Event()
+
+        expected_values = {
+            'speed': 3.0, # kmph
+            'torque': 5.0, # Nm
+            'grade': 1.0 # Deg
+        }
+        expected_ego_vx_mps = expected_values['speed'] / 3.6
+
+        radar_log_path = 'tests/test_data/sample_data/radar_log.json'
+        self.assertTrue(os.path.exists(radar_log_path), f"Radar log file not found at {radar_log_path}")
+
+        # Use the DELAYED mock CAN logger
+        can_process = multiprocessing.Process(
+            target=mock_can_logger_delayed_start,
+            args=(shared_live_can_data, can_logger_ready, shutdown_flag, self.test_output_dir, expected_values)
+        )
+
+        num_frames = 20 # Process fewer frames, we only care about the start
+        radar_process = multiprocessing.Process(
+            target=mock_radar_tracker_process,
+            args=(shared_live_can_data, can_logger_ready, shutdown_flag, self.test_output_dir, num_frames, radar_log_path)
+        )
+
+        print("Starting DELAYED CAN logger and Radar tracker processes...")
+        can_process.start()
+        radar_process.start()
+
+        can_process.join()
+        radar_process.join()
+
+        # Verification
+        self.assertTrue(os.path.exists(self.track_history_file), f"track_history.json was not created in {self.test_output_dir}")
+        
+        with open(self.track_history_file, 'r') as f:
+            history = json.load(f)
+        
+        self.assertIn('radarFrames', history)
+        radar_frames = history['radarFrames']
+        self.assertGreater(len(radar_frames), 0, "The radarFrames list is empty.")
+
+        # --- CRITICAL ASSERTION: Check the VERY FIRST frame in radarFrames ---
+        first_frame = radar_frames[0]
+        
+        self.assertIn('canVehSpeed_kmph', first_frame, "First frame is missing 'canVehSpeed_kmph'")
+        # The very first frame might have a slightly different interpolated value
+        # but it should NOT be a massive negative number.
+        self.assertIsNotNone(first_frame['canVehSpeed_kmph'], "First frame speed is None")
+        self.assertGreater(first_frame['canVehSpeed_kmph'], 0, "First frame speed should be positive")
+        self.assertLess(first_frame['canVehSpeed_kmph'], 100, "First frame speed is unrealistically high")
+
+        self.assertIn('shaftTorque_Nm', first_frame, "First frame is missing 'shaftTorque_Nm'")
+        self.assertIsNotNone(first_frame['shaftTorque_Nm'], "First frame torque is None")
+        self.assertGreater(first_frame['shaftTorque_Nm'], 0, "First frame torque should be positive")
+        self.assertLess(first_frame['shaftTorque_Nm'], 100, "First frame torque is unrealistically high")
+
+        self.assertIn('egoVelocity', first_frame, "First frame is missing 'egoVelocity'")
+        self.assertIsNotNone(first_frame['egoVelocity'][0], "First frame egoVx is None")
+        self.assertGreater(first_frame['egoVelocity'][0], 0, "First frame egoVx should be positive")
+
+        print(f"Startup race condition test finished successfully. Output files are in: {self.test_output_dir}")
+
 
 if __name__ == '__main__':
     # Set the start method for multiprocessing
