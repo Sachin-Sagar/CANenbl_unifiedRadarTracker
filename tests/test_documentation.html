@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAN Logger Test Suite Documentation</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; margin: 2em; background-color: #f8f9fa; color: #212529; }
+        h1, h2, h3 { color: #0056b3; }
+        h1 { border-bottom: 2px solid #dee2e6; padding-bottom: 0.5em; }
+        code { background-color: #e9ecef; padding: 0.2em 0.4em; border-radius: 3px; font-family: monospace; }
+        .container { max-width: 800px; margin: auto; background-color: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        ul { padding-left: 20px; }
+        li { margin-bottom: 0.5em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CAN Logger Test Suite Documentation</h1>
+
+        <h2>Overview</h2>
+        <p>This document describes the test suite for the <code>CANenbl_unifiedRadarTracker</code> project. The primary purpose of these tests is to validate the functionality and performance of the CAN logging and processing components, with a special focus on the dual-pipeline architecture designed to handle high-frequency and low-frequency CAN signals in parallel.</p>
+
+        <h2>Test Scripts</h2>
+        <p>The main test scripts are located in the <code>tests/test_cases/</code> directory.</p>
+
+        <h3>1. <code>test_dual_pipeline_simulation.py</code></h3>
+        <ul>
+            <li><strong>Purpose:</strong> This is the most critical test for debugging the core CAN processing logic. It simulates the entire dual-pipeline system using a pre-recorded log file (<code>2w_sample.log</code>) instead of live hardware.</li>
+            <li><strong>Functionality:</strong>
+                <ul>
+                    <li>It reads a BusMaster <code>.log</code> file.</li>
+                    <li>It acts as a dispatcher, sending CAN messages to either a high-frequency or low-frequency queue based on their message ID.</li>
+                    <li>It starts two independent worker processes to consume these queues, perfectly mimicking the live application's architecture.</li>
+                    <li>It verifies that the signals listed in <code>master_sigList.txt</code> are correctly decoded and processed by the appropriate worker.</li>
+                </ul>
+            </li>
+            <li><strong>Key Feature:</strong> The script uses a special <code>_debug_processing_worker</code> function that generates detailed, separate log files for each pipeline (<code>worker_1_high_freq.log</code> and <code>worker_2_low_freq.log</code>). This allows for isolated analysis of each worker's behavior, making it invaluable for diagnosing issues related to signal decoding, data corruption, or timing.</li>
+        </ul>
+
+        <h3>2. <code>test_can_service.py</code></h3>
+        <ul>
+            <li><strong>Purpose:</strong> To run an integration test on an alternative or legacy version of the CAN handling logic, specifically the <code>LiveCANManager</code>.</li>
+            <li><strong>Functionality:</strong>
+                <ul>
+                    <li>It uses mocks to create a virtual CAN bus that produces predictable messages.</li>
+                    <li>It starts the <code>LiveCANManager</code> and allows it to process the mock messages.</li>
+                    <li>It then simulates a radar worker requesting CAN data at a specific timestamp and verifies that the signal interpolation logic produces the correct value.</li>
+                </ul>
+            </li>
+        </ul>
+
+        <h3>3. <code>test_can_log_playback.py</code></h3>
+        <ul>
+            <li><strong>Purpose:</strong> This script is a utility module rather than a standalone test. Its main purpose is to provide a reliable way to parse CAN log files.</li>
+            <li><strong>Functionality:</strong> It contains the <code>parse_busmaster_log</code> function, which reads a raw <code>.log</code> file and converts each line into a structured <code>can.Message</code> object. This utility is used by <code>test_dual_pipeline_simulation.py</code> to feed the simulation.</li>
+        </ul>
+        
+        <h3>4. <code>tests_main.py</code></h3>
+        <ul>
+            <li><strong>Purpose:</strong> To act as a centralized test runner for the entire suite.</li>
+            <li><strong>Functionality:</strong> It uses Python's built-in <code>unittest</code> library to automatically discover all files matching the pattern <code>test_*.py</code> within the <code>test_cases</code> directory and execute them. This provides a convenient way to run all tests at once and get a consolidated result.</li>
+        </ul>
+
+        <h2>Worker Task Breakdown</h2>
+        <p>The <code>test_dual_pipeline_simulation.py</code> script creates two specialized worker processes. Here is a breakdown of their individual tasks.</p>
+
+        <h3>Worker 1: High-Frequency Pipeline</h3>
+        <ul>
+            <li><strong>Input Queue:</strong> <code>high_freq_raw_queue</code></li>
+            <li><strong>Messages:</strong> Receives messages with IDs corresponding to a <strong>10ms</strong> cycle time (e.g., 0x09A, 0x0AD).</li>
+            <li><strong>Monitored Signals:</strong> Checks decoded signals against the <code>high_freq_monitored_signals</code> set.</li>
+            <li><strong>Tasks:</strong>
+                <ol>
+                    <li>Pulls a raw CAN message from its dedicated queue.</li>
+                    <li>Uses the <code>cantools</code> library and the <code>VCU.dbc</code> file to decode the message's binary data into physical signal values (e.g., km/h, Nm).</li>
+                    <li>Compares the names of the decoded signals against its list of high-frequency signals to monitor.</li>
+                    <li>If a decoded signal is on its list, it packages the signal's name, value, and timestamp into a dictionary.</li>
+                    <li>Puts the final dictionary into the shared <code>log_queue</code> for the main test process to collect and verify.</li>
+                </ol>
+            </li>
+            <li><strong>Log File:</strong> <code>tests/test_data/worker_1_high_freq.log</code></li>
+        </ul>
+
+        <h3>Worker 2: Low-Frequency Pipeline</h3>
+        <ul>
+            <li><strong>Input Queue:</strong> <code>low_freq_raw_queue</code></li>
+            <li><strong>Messages:</strong> Receives messages with IDs corresponding to a <strong>100ms</strong> cycle time (e.g., 0x30E, 0x30F, 0x310).</li>
+            <li><strong>Monitored Signals:</strong> Checks decoded signals against the <code>low_freq_monitored_signals</code> set.</li>
+            <li><strong>Tasks:</strong>
+                <ol>
+                    <li>Pulls a raw CAN message from its dedicated queue.</li>
+                    <li>Performs the same decoding process as the high-frequency worker using the <code>VCU.dbc</code> file.</li>
+                    <li>Compares the decoded signals against its unique list of low-frequency signals.</li>
+                    <li>If a match is found, it packages the data into a dictionary.</li>
+                    <li>Puts the dictionary into the same shared <code>log_queue</code> for final verification.</li>
+                </ol>
+            </li>
+            <li><strong>Log File:</strong> <code>tests/test_data/worker_2_low_freq.log</code></li>
+        </ul>
+    </div>
+</body>
+</html>

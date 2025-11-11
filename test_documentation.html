@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Suite Documentation</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; max-width: 900px; margin: 0 auto; }
+        h1, h2, h3 { color: #333; }
+        code { background-color: #f4f4f4; padding: 2px 4px; border-radius: 4px; }
+        pre { background-color: #f4f4f4; padding: 10px; border-radius: 4px; white-space: pre-wrap; }
+        ul { padding-left: 20px; }
+    </style>
+</head>
+<body>
+
+<h1>Test Suite Documentation</h1>
+<p>This document describes the test suite for the <code>CANenbl_unifiedRadarTracker</code> project. The primary purpose of these tests is to validate the functionality and performance of the CAN logging and processing components, with a special focus on the dual-pipeline architecture.</p>
+
+<h2>Test Scripts</h2>
+<p>The main test scripts are located in the <code>tests/test_cases/</code> directory.</p>
+
+<h3><code>test_dual_pipeline_simulation.py</code></h3>
+<ul>
+    <li><strong>Purpose:</strong> This is the most critical test for debugging the core CAN processing logic. It simulates the entire dual-pipeline system using a pre-recorded log file (<code>2w_sample.log</code>) instead of live hardware.</li>
+    <li><strong>Functionality:</strong>
+        <ul>
+            <li>It reads a BusMaster <code>.log</code> file.</li>
+            <li>It acts as a dispatcher, sending CAN messages to either a high-frequency or low-frequency queue based on their message ID.</li>
+            <li>It starts two independent worker processes to consume these queues, mimicking the live application's architecture.</li>
+            <li>It verifies that the signals listed in <code>master_sigList.txt</code> are correctly decoded and processed by the appropriate worker.</li>
+        </ul>
+    </li>
+    <li><strong>Key Feature:</strong> The script uses a special <code>_debug_processing_worker</code> function that generates detailed, separate log files for each pipeline (<code>worker_1_high_freq.log</code> and <code>worker_2_low_freq.log</code>). This allows for isolated analysis of each worker's behavior.</li>
+</ul>
+
+<h3><code>test_can_service.py</code></h3>
+<ul>
+    <li><strong>Purpose:</strong> To run an integration test on an alternative or legacy version of the CAN handling logic, specifically the <code>LiveCANManager</code>.</li>
+    <li><strong>Functionality:</strong>
+        <ul>
+            <li>It uses mocks to create a virtual CAN bus that produces predictable messages.</li>
+            <li>It starts the <code>LiveCANManager</code> and allows it to process the mock messages.</li>
+            <li>It then verifies that the signal interpolation logic produces the correct value.</li>
+        </ul>
+    </li>
+</ul>
+
+<h3><code>test_can_log_playback.py</code></h3>
+<ul>
+    <li><strong>Purpose:</strong> This script is a utility module rather than a standalone test. Its main purpose is to provide a reliable way to parse CAN log files.</li>
+    <li><strong>Functionality:</strong> It contains the <code>parse_busmaster_log</code> function, which reads a raw <code>.log</code> file and converts each line into a structured <code>can.Message</code> object. This utility is used by <code>test_dual_pipeline_simulation.py</code> to feed the simulation.</li>
+</ul>
+
+<h3><code>tests_main.py</code></h3>
+<ul>
+    <li><strong>Purpose:</strong> To act as a centralized test runner for the entire suite.</li>
+    <li><strong>Functionality:</strong> It uses Python's built-in <code>unittest</code> library to automatically discover and execute all test files matching the pattern <code>test_*.py</code> within the <code>test_cases</code> directory.</li>
+</ul>
+
+<h2>Verifying the Dual-Pipeline Logic</h2>
+<p>A critical bug was identified where the main application was unable to log low-frequency (100ms) signals, while high-frequency (10ms) signals were logged correctly. The initial investigation confirmed the dual-pipeline code in <code>src/can_logger_app</code> appeared logically correct, and the issue was traced to a missing <code>master_sigList.txt</code> file in the <code>input/</code> directory.</p>
+<p>To confirm this fix without requiring live hardware, a temporary test script (<code>test_main_app_logic.py</code>) was created.</p>
+<ul>
+    <li><strong>Purpose:</strong> To perform a hardware-free integration test of the main application's <em>actual</em> dual-pipeline architecture.</li>
+    <li><strong>Method:</strong>
+        <ol>
+            <li>The test imported the <code>CANReader</code>, <code>processing_worker</code>, and <code>utils</code> directly from the <code>src/can_logger_app</code> module.</li>
+            <li>It mocked the <code>can.interface.Bus</code> to play back messages from the <code>2w_sample.log</code> file.</li>
+            <li>It instantiated the full dual-pipeline system: a <code>CANReader</code> dispatcher thread, a high-frequency queue and worker pool, and a low-frequency queue and worker pool.</li>
+            <li>Each worker pool was given its correctly segregated list of signals to monitor, exactly as in the main application.</li>
+        </ol>
+    </li>
+    <li><strong>Result:</strong> The test <strong>passed</strong>. It successfully logged both a known high-frequency signal (<code>ETS_MOT_ShaftTorque_Est_Nm</code>) and a known low-frequency signal (<code>ETS_VCU_VehSpeed_Act_kmph</code>).</li>
+    <li><strong>Conclusion:</strong> This test definitively proved that the root cause of the missing 100ms signals was the absent <code>master_sigList.txt</code> file. With the input file present, the main application's core logic for segregating and processing high and low-frequency signals works as designed. The temporary test was subsequently removed.</li>
+</ul>
+
+<h2>Worker Task Breakdown (<code>test_dual_pipeline_simulation.py</code>)</h2>
+<p>The <code>test_dual_pipeline_simulation.py</code> script creates two specialized worker processes.</p>
+
+<h3>Worker 1: High-Frequency Pipeline</h3>
+<ul>
+    <li><strong>Input Queue:</strong> <code>high_freq_raw_queue</code></li>
+    <li><strong>Messages:</strong> Receives messages with IDs corresponding to a <strong>10ms</strong> cycle time.</li>
+    <li><strong>Tasks:</strong>
+        <ol>
+            <li>Pulls a raw CAN message from its dedicated queue.</li>
+            <li>Decodes the message using the <code>VCU.dbc</code> file.</li>
+            <li>Checks the decoded signals against the <code>high_freq_monitored_signals</code> set.</li>
+            <li>If a signal is in the monitored set, it puts a log entry into the shared <code>log_queue</code>.</li>
+        </ol>
+    </li>
+    <li><strong>Log File:</strong> <code>tests/test_data/worker_1_high_freq.log</code></li>
+</ul>
+
+<h3>Worker 2: Low-Frequency Pipeline</h3>
+<ul>
+    <li><strong>Input Queue:</strong> <code>low_freq_raw_queue</code></li>
+    <li><strong>Messages:</strong> Receives messages with IDs corresponding to a <strong>100ms</strong> cycle time.</li>
+    <li><strong>Tasks:</strong>
+        <ol>
+            <li>Pulls a raw CAN message from its dedicated queue.</li>
+            <li>Performs the same decoding process as the high-frequency worker.</li>
+            <li>Compares the decoded signals against its unique list of low-frequency signals.</li>
+            <li>If a match is found, it puts the data into the shared <code>log_queue</code>.</li>
+        </ol>
+    </li>
+    <li><strong>Log File:</strong> <code>tests/test_data/worker_2_low_freq.log</code></li>
+</ul>
+
+<h2>Debugging Notes</h2>
+<h3>Missing Signals in Test Data</h3>
+<p>During debugging, it was discovered that the test <code>test_low_frequency_signals_are_processed</code> reports a warning that the signal <code>ETS_VCU_BrakePedal_Act_perc</code> is not found. This is expected behavior with the current test data.</p>
+<ul>
+    <li><strong>Reason:</strong> The configuration file <code>master_sigList.txt</code> lists <code>ETS_VCU_BrakePedal_Act_perc</code> as a signal to be monitored. However, the test log file <code>2w_sample.log</code> does not contain any CAN messages that include this specific signal.</li>
+    <li><strong>Conclusion:</strong> The test is functioning correctly. It is accurately reporting that a configured signal is not present in the provided data. This is a data-configuration mismatch, not a bug in the processing code.</li>
+</ul>
+
+</body>
+</html>

@@ -48,17 +48,25 @@ def processing_worker(worker_id, db, signals_to_log, raw_queue, results_queue, p
                 start_time = time.perf_counter()
                 try:
                     # Use cantools to decode the entire message at once
-                    decoded_signals = db.decode_message(msg['arbitration_id'], msg['data'])
+                    # MODIFICATION: Allow decoding of truncated frames, as seen in some logs.
+                    decoded_signals = db.decode_message(msg['arbitration_id'], msg['data'], allow_truncated=True)
 
                     for name, physical_value in decoded_signals.items():
                         # Only process signals that are in our master list
                         if name in signals_to_log:
+                            
+                            # MODIFICATION: Handle cantools 'NamedSignalValue' for enums
+                            final_value = physical_value
+                            if not isinstance(physical_value, (int, float)):
+                                # It's likely a NamedSignalValue, get its numerical value
+                                final_value = getattr(physical_value, 'value', 0)
+
                             # --- 1. Create the log entry --- 
                             log_entry = {
                                 "timestamp": float(msg['timestamp']),
                                 "message_id": msg['arbitration_id'],
                                 "signal": name,
-                                "value": float(physical_value) # Ensure native Python float
+                                "value": float(final_value) # Ensure native Python float
                             }
                             if config.DEBUG_PRINTING:
                                 logger.debug(f"[WORKER {worker_id}] Queueing: {log_entry}")
@@ -68,7 +76,7 @@ def processing_worker(worker_id, db, signals_to_log, raw_queue, results_queue, p
                             if live_data_dict is not None:
                                 # Use a simple list as the buffer
                                 buffer = live_data_dict.get(name, [])
-                                buffer.append((float(msg['timestamp']), float(physical_value)))
+                                buffer.append((float(msg['timestamp']), float(final_value)))
                                 # Keep the buffer trimmed to the last 10 values
                                 live_data_dict[name] = buffer[-10:]
 

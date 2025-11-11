@@ -267,7 +267,7 @@ Following the data flow fixes, debugging became difficult due to an inconsistent
 A comprehensive refactoring of the logging system was performed:
 1.  **Centralized Logger:** `src/radar_tracker/console_logger.py` was simplified to define a single, application-wide logger instance. All other modules (`data_adapter.py`, `tracker.py`, `update_and_save_history.py`) were modified to import and use this shared logger instance.
 2.  **Corrected Log Level:** The centralized logger was set to `logging.DEBUG` to ensure all diagnostic messages are captured.
-3.  **Centralized File I/O:** All file-writing responsibility was moved to `main.py`. 
+3.  **Centralized File I/O:** All file-writing responsibility was moved to `main.py`.
     -   It now creates a `FileHandler` to save a plain text `console_log.txt` to the correct timestamped directory.
     -   The shutdown sequence in `main.py` was fixed to reliably save the in-memory JSON logs to `console_log.json` in the timestamped directory, resolving the indentation error and race condition.
 4.  **Consistent Logger Usage in `main_live.py`:** The `src/radar_tracker/main_live.py` module was updated to import and use the centralized `logger` instance from `console_logger.py` instead of the standard `logging` module. This ensures that all messages (including `[INTERPOLATION]` debug messages) from the live radar processing are correctly routed through the application's logging infrastructure and appear in the console and log files.
@@ -482,4 +482,5 @@ The `main.py` script's Linux execution path was hardcoded to wait for a GPIO pin
 #### The Solution
 The GPIO-related function calls (`init_gpio`, `wait_for_switch_on`, `check_for_switch_off`, etc.) in `main.py` were commented out. This temporarily bypasses the physical switch requirement, allowing the application to start immediately on a Raspberry Pi, similar to how it runs on Windows. This change unblocks development while preserving the GPIO code for future use.
 
-
+## Development Rules
+- When working in the `tests` folder, do not edit any file outside of it.

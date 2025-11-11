@@ -1,89 +1,86 @@
-# Test Debugging and Fix Documentation
+# Test Suite Documentation
 
-This document outlines the debugging process and the solution implemented for the `test_can_log_playback` test case in `tests/test_can_log_playback.py`.
+This document describes the test suite for the `CANenbl_unifiedRadarTracker` project. The primary purpose of these tests is to validate the functionality and performance of the CAN logging and processing components, with a special focus on the dual-pipeline architecture.
 
-## 1. Problem Description
+## Test Scripts
 
-The `test_can_log_playback` test was failing with the following assertion error:
-`AssertionError: 'VCU_Speed' not found in {'dispatch_total_time': ..., 'dispatch_count': ...}`
+The main test scripts are located in the `tests/test_cases/` directory.
 
-This indicated that the `can_buffers` dictionary, which should contain decoded CAN signal data, was missing the expected 'VCU_Speed' signal.
+### `test_dual_pipeline_simulation.py`
 
-## 2. Initial Diagnosis and Fix Attempt (Multiprocessing.Process Mock)
+*   **Purpose:** This is the most critical test for debugging the core CAN processing logic. It simulates the entire dual-pipeline system using a pre-recorded log file (`2w_sample.log`) instead of live hardware.
+*   **Functionality:**
+    *   It reads a BusMaster `.log` file.
+    *   It acts as a dispatcher, sending CAN messages to either a high-frequency or low-frequency queue based on their message ID.
+    *   It starts two independent worker processes to consume these queues, mimicking the live application's architecture.
+    *   It verifies that the signals listed in `master_sigList.txt` are correctly decoded and processed by the appropriate worker.
+*   **Key Feature:** The script uses a special `_debug_processing_worker` function that generates detailed, separate log files for each pipeline (`worker_1_high_freq.log` and `worker_2_low_freq.log`). This allows for isolated analysis of each worker's behavior.
 
-Upon investigation, it was found that the test was patching `multiprocessing.Process`. This prevented the `processing_worker` functions (responsible for decoding CAN messages and populating the output queue) from actually executing. As a result, no decoded signal data was ever placed into the `output_queue`, leading to the `can_buffers` being empty of signal data.
+### `test_can_service.py`
 
-**Fix Attempt 1:** The `@patch('multiprocessing.Process')` decorator was removed from the test method.
+*   **Purpose:** To run an integration test on an alternative or legacy version of the CAN handling logic, specifically the `LiveCANManager`.
+*   **Functionality:**
+    *   It uses mocks to create a virtual CAN bus that produces predictable messages.
+    *   It starts the `LiveCANManager` and allows it to process the mock messages.
+    *   It then verifies that the signal interpolation logic produces the correct value.
 
-## 3. Subsequent Problem (Multiprocessing.Manager Mock and Deque Propagation)
+### `test_can_log_playback.py`
 
-After removing the `multiprocessing.Process` mock, the test failed with a new error:
-`AssertionError: 0 not greater than 0 : VCU_Speed buffer should not be empty.`
+*   **Purpose:** This script is a utility module rather than a standalone test. Its main purpose is to provide a reliable way to parse CAN log files.
+*   **Functionality:** It contains the `parse_busmaster_log` function, which reads a raw `.log` file and converts each line into a structured `can.Message` object. This utility is used by `test_dual_pipeline_simulation.py` to feed the simulation.
 
-This indicated that while the 'VCU_Speed' key was now present in `can_buffers`, its associated data (a `deque`) was empty. Further analysis revealed two issues:
-1.  The test was still mocking `multiprocessing.Manager`. This meant that the `LiveCANManager` was using standard Python `dict` and `queue.Queue` objects, while the `processing_worker`s (now running as real processes) were trying to communicate using these non-managed objects, leading to inter-process communication failure.
-2.  Even if the `multiprocessing.Manager` was real, the `_buffer_filler` thread in `LiveCANManager` was modifying a `collections.deque` object (which is mutable) directly within a `multiprocessing.Manager.dict()`. `multiprocessing` does not automatically propagate in-place modifications to mutable objects stored in managed dictionaries.
+### `tests_main.py`
 
-## 4. Solution Implementation (Adhering to Constraints)
+*   **Purpose:** To act as a centralized test runner for the entire suite.
+*   **Functionality:** It uses Python's built-in `unittest` library to automatically discover and execute all test files matching the pattern `test_*.py` within the `test_cases` directory.
 
-The user provided a constraint: "Do not change anything outside the tests folder. You may make a copy inside the tests folder if necessary."
+## Verifying the Dual-Pipeline Logic
 
-To address the issues while respecting this constraint, the following steps were taken:
+A critical bug was identified where the main application was unable to log low-frequency (100ms) signals, while high-frequency (10ms) signals were logged correctly. The initial investigation confirmed the dual-pipeline code in `src/can_logger_app` appeared logically correct, and the issue was traced to a missing `master_sigList.txt` file in the `input/` directory.
 
-### 4.1. Create a Fixed `LiveCANManager` Copy
+To confirm this fix without requiring live hardware, a temporary test script (`test_main_app_logic.py`) was created.
 
-1.  A copy of `src/can_service/live_can_manager.py` was created at `tests/lib/live_can_manager_fixed.py`.
-2.  The relative imports within `live_can_manager_fixed.py` were updated to absolute imports (e.g., `from src.can_service.can_handler import CANReader`) to ensure correct module resolution from the `tests/` directory.
-3.  The `_buffer_filler` method in `tests/lib/live_can_manager_fixed.py` was modified to correctly propagate changes to the `deque` within the `shared_data_buffer`. Instead of modifying the `deque` in-place, the `deque` is retrieved, modified, and then explicitly re-assigned back to the `shared_data_buffer`. This ensures `multiprocessing.Manager` registers the change.
-    ```python
-    # Original problematic code:
-    # self.shared_data_buffer[signal_name].append((timestamp, value))
+*   **Purpose:** To perform a hardware-free integration test of the main application's *actual* dual-pipeline architecture.
+*   **Method:**
+    1.  The test imported the `CANReader`, `processing_worker`, and `utils` directly from the `src/can_logger_app` module.
+    2.  It mocked the `can.interface.Bus` to play back messages from the `2w_sample.log` file.
+    3.  It instantiated the full dual-pipeline system: a `CANReader` dispatcher thread, a high-frequency queue and worker pool, and a low-frequency queue and worker pool.
+    4.  Each worker pool was given its correctly segregated list of signals to monitor, exactly as in the main application.
+*   **Result:** The test **passed**. It successfully logged both a known high-frequency signal (`ETS_MOT_ShaftTorque_Est_Nm`) and a known low-frequency signal (`ETS_VCU_VehSpeed_Act_kmph`).
+*   **Conclusion:** This test definitively proved that the root cause of the missing 100ms signals was the absent `master_sigList.txt` file. With the input file present, the main application's core logic for segregating and processing high and low-frequency signals works as designed. The temporary test was subsequently removed.
 
-    # Fixed code:
-    current_deque = self.shared_data_buffer.get(signal_name, deque(maxlen=10))
-    current_deque.append((timestamp, value))
-    self.shared_data_buffer[signal_name] = current_deque
-    ```
-    Additionally, the `except Exception` block was made more specific to `except queue.Empty` for clarity.
 
-### 4.2. Modify `test_can_log_playback.py`
+## Worker Task Breakdown (`test_dual_pipeline_simulation.py`)
 
-The `tests/test_cases/test_can_log_playback.py` file was modified to use the newly created `tests/lib/live_can_manager_fixed.py`:
+The `test_dual_pipeline_simulation.py` script creates two specialized worker processes.
 
-1.  The top-level import `from can_service.live_can_manager import LiveCANManager` was removed.
-2.  The `with patch.dict('sys.modules', {'config': mock_config}):` block was updated to import and instantiate `LiveCANManager` from `tests/lib/live_can_manager_fixed.py` *inside* the patched context. This ensures that the fixed manager and its dependencies (which rely on `config`) are loaded with the mocked configuration.
-    ```python
-    # Original code:
-    # from can_service.live_can_manager import LiveCANManager
-    # ...
-    # with patch.dict('sys.modules', {'config': mock_config}):
-    #     import importlib
-    #     from can_service import utils, can_handler, live_can_manager
-    #     importlib.reload(utils)
-    #     importlib.reload(can_handler)
-    #     importlib.reload(live_can_manager)
-    #     can_manager = live_can_manager.LiveCANManager(...)
+### Worker 1: High-Frequency Pipeline
 
-    # Modified code:
-    # (No top-level import for LiveCANManager)
-    # ...
-    with patch.dict('sys.modules', {'config': mock_config}):
-        from live_can_manager_fixed import LiveCANManager # Import here
-        can_manager = LiveCANManager(mock_config, dbc_path, signal_list_path)
-    ```
+*   **Input Queue:** `high_freq_raw_queue`
+*   **Messages:** Receives messages with IDs corresponding to a **10ms** cycle time.
+*   **Tasks:**
+    1.  Pulls a raw CAN message from its dedicated queue.
+    2.  Decodes the message using the `VCU.dbc` file.
+    3.  Checks the decoded signals against the `high_freq_monitored_signals` set.
+    4.  If a signal is in the monitored set, it puts a log entry into the shared `log_queue`.
+*   **Log File:** `tests/test_data/worker_1_high_freq.log`
 
-## 5. Result
+### Worker 2: Low-Frequency Pipeline
 
-After these changes, the `test_can_log_playback` test now passes successfully, confirming that CAN messages are correctly processed and their signals are stored in the shared buffer.
+*   **Input Queue:** `low_freq_raw_queue`
+*   **Messages:** Receives messages with IDs corresponding to a **100ms** cycle time.
+*   **Tasks:**
+    1.  Pulls a raw CAN message from its dedicated queue.
+    2.  Performs the same decoding process as the high-frequency worker.
+    3.  Compares the decoded signals against its unique list of low-frequency signals.
+    4.  If a match is found, it puts the data into the shared `log_queue`.
+*   **Log File:** `tests/test_data/worker_2_low_freq.log`
 
-## 6. Expected `StopIteration` in `test_can_service_integration`
+## Debugging Notes
 
-When running the test suite, you might observe a `StopIteration` traceback printed to the console, specifically originating from the `CANReader` thread during the execution of `test_can_service_integration`.
+### Missing Signals in Test Data
 
-This is an **expected and normal behavior** of the test setup and does **not** indicate a failure in the application code or the test itself. Here's why:
+During debugging, it was discovered that the test `test_low_frequency_signals_are_processed` reports a warning that the signal `ETS_VCU_BrakePedal_Act_perc` is not found. This is expected behavior with the current test data.
 
--   **Mocked CAN Bus**: In `test_can_service_integration`, the `can.interface.Bus.recv` method is mocked using a `side_effect` that is a finite list of `can.Message` objects.
--   **Iterator Exhaustion**: The `CANReader` thread continuously calls `self.bus.recv()` in a loop to simulate receiving CAN messages. After all the mocked messages in the `side_effect` list have been yielded, the next call to `next(effect)` (which happens internally when the iterator is exhausted) raises a `StopIteration` exception.
--   **Daemon Thread Behavior**: This exception occurs within a daemon thread. While it is printed to `stderr` as an unhandled exception in that thread, it does not propagate to the main test runner process and therefore does not cause the test to fail. The test proceeds to its shutdown sequence and completes successfully, as indicated by the final `OK` status.
-
-In summary, the `StopIteration` is a benign artifact of how the mocked CAN bus is configured to provide a limited number of messages for the test. The test is passing as intended.
+*   **Reason:** The configuration file `master_sigList.txt` lists `ETS_VCU_BrakePedal_Act_perc` as a signal to be monitored. However, the test log file `2w_sample.log` does not contain any CAN messages that include this specific signal.
+*   **Conclusion:** The test is functioning correctly. It is accurately reporting that a configured signal is not present in the provided data. This is a data-configuration mismatch, not a bug in the processing code.
