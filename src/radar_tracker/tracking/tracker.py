@@ -150,33 +150,48 @@ class RadarTracker:
                 logger.debug(f"[TRACKER_CORE] DBSCAN found {len(unique_ids)} unique clusters.")
 
             if unique_ids.size > 0:
-                temp_centroids, temp_cluster_info = [], []
-                stationary_speed_threshold = self.params['ego_motion_params']['stationarySpeedThreshold']
+                # --- Refactored Cluster Processing (Restored Two-Loop Structure) ---
 
+                # --- Loop 1: Aggregate all cluster data first ---
+                all_cluster_info = []
                 for cid in unique_ids:
                     cluster_indices = np.where(dbscan_clusters == cid)[0]
                     centroid = np.mean(cartesian_pos_data[:, cluster_indices], axis=1)
                     mean_radial_speed = np.mean(point_cloud[3, cluster_indices])
+                    all_cluster_info.append({
+                        'X': centroid[0], 'Y': centroid[1], 'radialSpeed': mean_radial_speed,
+                        'originalClusterID': cid
+                    })
+
+                # --- Reflection Filtering (operates on all clusters) ---
+                cluster_ids_to_remove = detect_and_filter_reflections(
+                    grid_map, all_cluster_info, dbscan_clusters, point_cloud,
+                    self.params['reflection_detection_params']['speed_similarity_threshold_mps']
+                )
+
+                # --- Loop 2: Filter and select final clusters ---
+                temp_centroids, temp_cluster_info = [], []
+                stationary_speed_threshold = self.params['ego_motion_params']['stationarySpeedThreshold']
+
+                for info in all_cluster_info:
+                    if info['originalClusterID'] in cluster_ids_to_remove:
+                        continue
+
+                    cluster_indices = np.where(dbscan_clusters == info['originalClusterID'])[0]
+                    centroid = np.array([info['X'], info['Y']])
                     
-                    # --- THIS IS THE FIX ---
-                    # Correctly determine if a cluster is moving based on the ego vehicle's state.
                     if is_vehicle_moving:
-                        # When moving, use RANSAC outliers. A high ratio of outliers means the cluster is moving relative to the static environment.
                         outlier_ratio = np.sum(current_frame.isOutlier[cluster_indices]) / len(cluster_indices)
                         is_moving_cluster = outlier_ratio > self.params['cluster_filter_params']['min_outlierClusterRatio_thrs']
                     else:
-                        # When stationary, the world is the reference. Use the cluster's absolute radial speed.
-                        is_moving_cluster = abs(mean_radial_speed) > stationary_speed_threshold
-                    # --- END OF FIX ---
+                        is_moving_cluster = abs(info['radialSpeed']) > stationary_speed_threshold
 
-                    # Filter 1: Dynamic Barriers (Guardrails). Only active when vehicle is moving straight.
                     if dynamic_box is not None:
                         is_in_dynamic_box = (dynamic_box['X_RANGE'][0] <= centroid[0] <= dynamic_box['X_RANGE'][1]) and \
                                             (dynamic_box['Y_RANGE'][0] <= centroid[1] <= dynamic_box['Y_RANGE'][1])
                         if not is_moving_cluster and is_in_dynamic_box:
                             continue 
                     
-                    # Filter 2: Static Box (for tracking stopped cars).
                     is_in_static_box = (static_box['X_RANGE'][0] <= centroid[0] <= static_box['X_RANGE'][1]) and \
                                        (static_box['Y_RANGE'][0] <= centroid[1] <= static_box['Y_RANGE'][1])
                     
@@ -185,37 +200,17 @@ class RadarTracker:
                     azimuth_rad = np.arctan2(centroid[0], centroid[1])
                     temp_centroids.append(centroid)
                     temp_cluster_info.append({
-                        'X': centroid[0], 'Y': centroid[1], 'radialSpeed': mean_radial_speed,
-                        'vx': mean_radial_speed * np.sin(azimuth_rad), 
-                        'vy': mean_radial_speed * np.cos(azimuth_rad),
-                        'isOutlierCluster': is_moving_cluster, # This flag now correctly represents motion
-                        'isStationary_inBox': is_stationary_in_box_flag,
-                        'originalClusterID': cid # <--- Ensure originalClusterID is added
+                        'X': centroid[0], 'Y': centroid[1], 'radialSpeed': info['radialSpeed'],
+                        'vx': info['radialSpeed'] * np.sin(azimuth_rad), 
+                        'vy': info['radialSpeed'] * np.cos(azimuth_rad),
+                        'isOutlierCluster': is_moving_cluster,
+                        'isStationary_inBox': is_stationary_in_box_flag
                     })
 
                 if temp_centroids:
                     detected_centroids = np.array(temp_centroids)
                     detected_cluster_info = temp_cluster_info
 
-            # --- ADD THIS BLOCK START ---
-            if detected_centroids.shape[0] > 0:
-                cluster_ids_to_remove = detect_and_filter_reflections(
-                    grid_map,
-                    detected_cluster_info,
-                    dbscan_clusters, # Pass the full cluster list
-                    point_cloud,     # Pass the full point cloud
-                    self.params['dbscan_params']['epsilon_vel'] # You can use a dedicated param later
-                )
-    
-                if cluster_ids_to_remove:
-                    logger.debug(f"[TRACKER_CORE] Reflection filter removing {len(cluster_ids_to_remove)} clusters.")
-                    keep_indices = [
-                        i for i, info in enumerate(detected_cluster_info)
-                        if info['originalClusterID'] not in cluster_ids_to_remove
-                    ]
-                    detected_centroids = detected_centroids[keep_indices]
-                    detected_cluster_info = [detected_cluster_info[i] for i in keep_indices]
-            # --- ADD THIS BLOCK END ---
 
         current_frame.detectedClusterInfo = np.array(detected_cluster_info, dtype=object) if detected_cluster_info else np.array([])
         

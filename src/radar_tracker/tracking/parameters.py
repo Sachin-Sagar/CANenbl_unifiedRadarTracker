@@ -79,6 +79,11 @@ def define_parameters():
         'safety_margin': 0.5
     }
 
+    # --- Reflection Filtering Parameters ---
+    params['reflection_detection_params'] = {
+        'speed_similarity_threshold_mps': 0.5
+    }
+
     # --- Vehicle Physical Parameters ---
     params['vehicle_params'] = {
         'WHEEL_RADIUS': 0.35, # meters
