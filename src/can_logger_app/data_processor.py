@@ -74,9 +74,16 @@ def processing_worker(worker_id, db, signals_to_log, raw_queue, results_queue, p
                             
                             # --- 2. Share for live radar --- 
                             if live_data_dict is not None:
+                                
+                                # --- THIS IS THE FIX ---
+                                # Cast to float first, then to string to prevent corruption.
+                                timestamp_str = str(float(msg['timestamp']))
+                                value_str = str(float(final_value))
+                                # --- END OF FIX ---
+
                                 # Use a simple list as the buffer
                                 buffer = live_data_dict.get(name, [])
-                                buffer.append((float(msg['timestamp']), float(final_value)))
+                                buffer.append((timestamp_str, value_str)) # Store strings
                                 # Keep the buffer trimmed to the last 10 values
                                 live_data_dict[name] = buffer[-10:]
 

@@ -221,16 +221,23 @@ class RadarWorker(QObject):
             for signal_name, buffer in can_buffers.items():
                 if buffer:
                     values = [item[1] for item in buffer]
-                    avg_can_data[signal_name] = np.mean(values)
+                    avg_can_data[signal_name] = np.mean([float(v) for v in values]) # Cast to float here
             logger.debug(f"[INTERPOLATION] Avg. CAN signals for frame: {avg_can_data}")
 
         for signal_name, buffer in can_buffers.items():
             if not buffer:
                 continue
             
-            # The buffer is a list of (timestamp, value) tuples
-            timestamps = [item[0] for item in buffer]
-            values = [item[1] for item in buffer]
+            # --- THIS IS THE FIX ---
+            # The buffer is a list of (timestamp_str, value_str) tuples.
+            # We must parse them back to floats.
+            try:
+                timestamps = [float(item[0]) for item in buffer]
+                values = [float(item[1]) for item in buffer]
+            except (ValueError, TypeError) as e:
+                logger.warning(f"[INTERPOLATION] Could not parse buffer for {signal_name}: {e}. Buffer: {buffer}")
+                continue
+            # --- END OF FIX ---
 
             if len(timestamps) < 2:
                 interp_value = values[0] if values else np.nan

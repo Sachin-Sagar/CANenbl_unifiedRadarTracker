@@ -6,26 +6,51 @@ from .utils.coordinate_transforms import cartesian_to_polar, polar_to_cartesian
 
 def _convert_track_to_dict(track, params):
     """Converts a single Track object to a JSON-serializable dictionary."""
-    if track.isLost:
+    
+    # --- THIS IS THE FIX ---
+    # Use .get() for safe dictionary access and use the correct keys
+    
+    if track.get('isLost'):
         return None
 
-    # Calculate ellipse for visualization
-    radii, angle_rad = calculate_ellipse_radii(track.immState.S, 0.95)
+    # Get the fused covariance 'P' from the immState dictionary
+    fused_cov = track.get('immState', {}).get('P')
+    if fused_cov is None:
+        return None # Not enough data to plot
+
+    radii, angle_rad = calculate_ellipse_radii(fused_cov[:2, :2], 0.95)
     
-    # Get the correct model for kinematics
-    c_model = np.argmax(track.immState.mu)
-    state_vec = track.immState.X[c_model]
+    # Get the model probabilities (key is 'modelProbabilities', not 'mu')
+    model_probs = track.get('immState', {}).get('modelProbabilities')
+    if model_probs is None:
+        return None # Not enough data
+
+    # Get the list of individual model states (key is 'models', not 'X')
+    model_states = track.get('immState', {}).get('models')
+    if model_states is None or len(model_states) == 0:
+        return None # Not enough data
+
+    # Find the index of the most likely model
+    c_model_index = np.argmax(model_probs)
+    
+    # Get the state vector 'x' from the most likely model in the 'models' list
+    state_vec = model_states[c_model_index].get('x')
+    if state_vec is None:
+        return None # State vector is missing
+
+    # Flatten state_vec in case it's (7,1)
+    state_vec = state_vec.flatten()
     
     # Use polar coordinates for the primary state
     r, az, vr, _ = cartesian_to_polar(state_vec[0], state_vec[1], state_vec[2], state_vec[3])
 
     return {
-        "id": track.id,
-        "isConfirmed": track.isConfirmed,
-        "isLost": track.isLost,
-        "age": track.age,
-        "hits": track.hits,
-        "misses": track.misses,
+        "id": track.get('id'),
+        "isConfirmed": track.get('isConfirmed'),
+        "isLost": track.get('isLost'),
+        "age": track.get('age'),
+        "hits": track.get('hits'),
+        "misses": track.get('misses'),
         "x": float(state_vec[0]),
         "y": float(state_vec[1]),
         "vx": float(state_vec[2]),
@@ -37,12 +62,13 @@ def _convert_track_to_dict(track, params):
         "radialSpeed": float(vr),
         "S_ellipse_radii": [float(radii[0]), float(radii[1])],
         "S_ellipse_angle_deg": float(np.rad2deg(angle_rad)),
-        "modelProbabilities": [float(mu) for mu in track.immState.mu],
-        "ttc": track.ttc if track.ttc is not None else float('inf'),
-        "ttcCategory": track.ttcCategory
+        "modelProbabilities": [float(mu) for mu in model_probs.flatten()],
+        "ttc": track.get('ttc') if track.get('ttc') is not None else float('inf'),
+        "ttcCategory": track.get('ttcCategory')
     }
+    # --- END OF FIX ---
 
-# --- THIS IS THE FIXED FUNCTION ---
+
 def _convert_cluster_to_dict(cluster):
     """Converts a single cluster dictionary to a JSON-serializable dictionary."""
     if cluster is None:
@@ -67,7 +93,6 @@ def _convert_cluster_to_dict(cluster):
         "x": float(x_mean),
         "y": float(y_mean)
     }
-# --- END OF FIX ---
 
 def _convert_point_to_dict(point):
     """Converts a single point (as a dictionary) to a JSON-serializable dictionary."""
@@ -124,15 +149,16 @@ def create_visualization_data(all_tracks, fhist, params=None):
             "frameIdx": getattr(frame, 'frameIdx', None),
             "motionState": getattr(frame, 'motionState', None),
             "egoVelocity": [ego_vx, ego_vy],
-            "canVehSpeed_kmph": getattr(frame, 'canVehSpeed_kmph', None),
             
-            # --- ADDED PER YOUR REQUEST ---
-            "ETS_VCU_AccelPedal_Act_perc": can_signals.get('ETS_VCU_AccelPedal_Act_perc', None),
+            # --- Read all CAN values from the stored dictionary ---
+            "canVehSpeed_kmph": can_signals.get('ETS_VCU_VehSpeed_Act_kmph', None),
+            "AccelPedal_Act_perc": can_signals.get('ETS_VCU_AccelPedal_Act_perc', None),
+            "shaftTorque_Nm": can_signals.get('ETS_MOT_ShaftTorque_Est_Nm', None),
+            "engagedGear": can_signals.get('ETS_VCU_Gear_Engaged_St_enum', None),
+            "roadGrade_Deg": can_signals.get('EstimatedGrade_Est_Deg', None),
             
+            # --- Non-CAN fields ---
             "correctedEgoSpeed_mps": getattr(frame, 'correctedEgoSpeed_mps', None),
-            "shaftTorque_Nm": getattr(frame, 'shaftTorque_Nm', None),
-            "engagedGear": getattr(frame, 'engagedGear', None),
-            "roadGrade_Deg": getattr(frame, 'roadGrade_Deg', None),
             "estimatedAcceleration_mps2": getattr(frame, 'estimatedAcceleration_mps2', None),
             "iirFilteredVx_ransac": getattr(frame, 'iirFilteredVx_ransac', 0.0),
             "iirFilteredVy_ransac": getattr(frame, 'iirFilteredVy_ransac', 0.0),
@@ -146,12 +172,11 @@ def create_visualization_data(all_tracks, fhist, params=None):
         for signal_name, value in can_signals.items():
             if signal_name not in frame_output:
                 frame_output[signal_name] = value
-
+        
         # Add clusters
         point_cloud_data = getattr(frame, 'pointCloud', None)
         cluster_info = getattr(frame, 'detectedClusterInfo', None)
 
-        # Check .size > 0 for numpy arrays, or len() > 0 for lists
         is_cluster_info_non_empty = False
         if cluster_info is not None:
             if isinstance(cluster_info, np.ndarray):
@@ -166,7 +191,6 @@ def create_visualization_data(all_tracks, fhist, params=None):
                     frame_output["clusters"].append(cluster_dict)
 
         # Add point cloud
-        # Check if point_cloud_data is a dict, has 'x', and 'x' is not empty
         is_point_cloud_non_empty = False
         if point_cloud_data is not None and isinstance(point_cloud_data, dict) and 'x' in point_cloud_data:
             point_x_array = point_cloud_data.get('x')

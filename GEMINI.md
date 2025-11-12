@@ -243,16 +243,16 @@ The Problem
 During live testing, low-frequency (100ms cycle time) CAN signals were consistently marked as "UNSEEN" in the final CAN data logging summary, indicating they were never processed or logged by the can_logger_app. High-frequency (10ms) signals, however, were logged correctly.
 
 The Diagnosis
-The can_logger_app employs a dual-pipeline architecture with separate worker pools for high-frequency and low-frequency messages. While the CANReader correctly dispatched messages to their respective queues, the processing_worker instances were not specialized. Both high-frequency and low-frequency workers were being passed the all_monitoring_signals set, meaning each worker was attempting to process all signals, regardless of its assigned queue. This inefficiency, particularly for the low-frequency workers, likely led to them being starved of processing time or simply not correctly identifying and logging their specific signals within the general pool.
+The can_logger_app employs a dual-pipeline architecture with separate worker pools for high-frequency and low-frequency messages. While the CANReader correctly dispatched messages to their respective queues, the processing_worker instances were not specialized. Both high-frequency and low-frequency workers were being passed the *entire* `all_monitoring_signals` set, meaning each worker was attempting to process all signals, regardless of its assigned queue. This inefficiency likely led to the low-frequency workers not correctly identifying and logging their specific signals.
 
 The Solution
 The src/can_logger_app/main.py file was modified to specialize the worker processes:
 
-Two distinct sets of signal names were created: high_freq_monitored_signals and low_freq_monitored_signals.
+Two distinct sets of signal names were created: `high_freq_monitored_signals` and `low_freq_monitored_signals`.
 
-The multiprocessing.Process calls for the high-frequency worker pool were updated to pass only high_freq_monitored_signals.
+The `multiprocessing.Process` calls for the high-frequency worker pool were updated to pass only `high_freq_monitored_signals`.
 
-The multiprocessing.Process calls for the low-frequency worker pool were updated to pass only low_freq_monitored_signals.
+The `multiprocessing.Process` calls for the low-frequency worker pool were updated to pass only `low_freq_monitored_signals`.
 
 This ensures that each worker pool is responsible only for its designated set of signals, making the dual-pipeline processing truly efficient and resolving the issue of missing low-frequency CAN signals.
 
@@ -261,47 +261,41 @@ The Goal
 To create a robust, automated test for the live CAN-to-tracker data pipeline to ensure data integrity and prevent regressions, specifically addressing potential corruption of CAN signal values as they flow from the CAN logger to the radar tracker and into the final track_history.json.
 
 The Implementation
-A new test file, tests/test_cases/test_live_data_pipeline.py, was created to simulate the interaction between the can_logger_app and the radar_tracker.
+A new test file, `tests/test_cases/test_live_data_pipeline.py`, was created to simulate the interaction between the can_logger_app and the radar_tracker.
 
-Mock CAN Logger Process (mock_can_logger_process):
+Mock CAN Logger Process (`mock_can_logger_process`):
 
-This function simulates the can_logger_app by running in a separate multiprocessing.Process.
+This function simulates the `can_logger_app` by running in a separate `multiprocessing.Process`.
 
-Instead of reading from a log file, it continuously writes predefined, constant values (e.g., 50.0 kmph for ETS_VCU_VehSpeed_Act_kmph and 10.0 Nm for ETS_MOT_ShaftTorque_Est_Nm) along with a current timestamp into a multiprocessing.Manager.dict() (the shared_live_can_data).
+It continuously writes predefined, constant values (e.g., 50.0 kmph for `ETS_VCU_VehSpeed_Act_kmph`) into a `multiprocessing.Manager.dict()` (the `shared_live_can_data`).
 
-It immediately sets a multiprocessing.Event (can_logger_ready) to signal that data is available.
+It immediately sets a `multiprocessing.Event` (`can_logger_ready`) to signal that data is available.
 
-It updates the shared dictionary every 10ms until a shutdown_flag is set.
+Mock Radar Tracker Process (`mock_radar_tracker_process`):
 
-Mock Radar Tracker Process (mock_radar_tracker_process):
+This function simulates the `radar_tracker` by running in another `multiprocessing.Process`.
 
-This function simulates the radar_tracker by running in another multiprocessing.Process.
+It initializes the `RadarTracker` and waits for the `can_logger_ready` event, ensuring the CAN data stream has started.
 
-It initializes the RadarTracker and waits for the can_logger_ready event, ensuring the CAN data stream has started.
+It generates dummy radar frames and, for each frame, retrieves the latest CAN signal values from the `shared_live_can_data`.
 
-It generates dummy radar frames with incrementing timestamps.
+It then calls the *actual* `adapt_frame_data_to_fhist` and `tracker.process_frame` functions from the `src/radar_tracker` module, passing the dummy radar frame and the retrieved CAN data.
 
-For each dummy frame, it retrieves the latest CAN signal values from the shared_live_can_data.
-
-It then calls the actual adapt_frame_data_to_fhist and tracker.process_frame functions from the src/radar_tracker module, passing the dummy radar frame and the retrieved CAN data.
-
-After processing a fixed number of frames, it saves the resulting fhist_history to a track_history.json file in a timestamped output directory.
-
-It sets the shutdown_flag to signal the mock CAN logger to terminate.
+After processing a fixed number of frames, it saves the resulting `fhist_history` to a `track_history.json` file.
 
 Test Orchestration (TestLiveDataPipeline.test_data_integrity_in_live_pipeline):
 
-The main test method sets up the multiprocessing.Manager, shared dictionary, and events.
+The main test method sets up the multiprocessing components, starts both mock processes, and waits for them to complete.
 
-It starts both mock processes and waits for them to complete.
+Verification: It loads the generated `track_history.json` and asserts that the CAN-derived fields in the `radarFrames` section match the predefined constant values, confirming that the data was correctly transferred and processed without corruption.
 
-Verification: It loads the generated track_history.json and asserts that the canVehSpeed_kmph and shaftTorque_Nm fields in the final frames match the predefined constant values, confirming that the data was correctly transferred and processed without corruption.
+Race Condition Test: A second test, `test_startup_race_condition_fix`, uses a `mock_can_logger_delayed_start` function to validate that the `can_logger_ready` event correctly prevents the tracker from processing initial "garbage" data.
 
 Multiprocessing Fix:
 
-To prevent child processes from re-executing the test suite (which can lead to crashes or unexpected behavior), the unittest.main() call in test_live_data_pipeline.py was guarded with if __name__ == '__main__':.
+To prevent child processes from re-executing the test suite, the `unittest.main()` call was guarded with `if __name__ == '__main__':`.
 
-Additionally, multiprocessing.set_start_method('spawn') was explicitly called to ensure consistent and safer process creation across different operating systems.
+`multiprocessing.set_start_method('spawn')` was explicitly called to ensure consistent and safer process creation across different operating systems.
 
 Part 10: Kvaser PermissionError on Windows
 The Problem
@@ -334,7 +328,7 @@ Despite the CAN data being correctly logged in can_log.json and interpolated in 
 The Diagnosis
 The root cause was a data flow disconnect between the data adaptation step and the final JSON export step:
 
-Inconsistent Naming: The data_adapter.py module used one set of names for CAN signals when populating the FHistFrame object (e.g., calculating egoVx from ETS_VCU_VehSpeed_Act_kmph), but the export_to_json.py module expected different, shorter attribute names (e.g., VehSpeed_Act_kmph).
+Inconsistent Naming: The data_adapter.py module used one set of names for CAN signals when populating the FHistFrame object (e.g., calculating egoVx from ETS_VCU_VehSpeed_Act_kmph), but the export_to_json.py module expected different, shorter attribute names (e.g., canVehSpeed_kmph).
 
 Missing Raw Data: The FHistFrame object was being populated with the processed egoVx (speed in m/s), but it was not storing the original, raw CAN signal values (like speed in km/h, gear status, or torque) that the final JSON schema required.
 
@@ -624,25 +618,20 @@ The GPIO-related function calls (init_gpio, wait_for_switch_on, check_for_switch
 
 Part 32: Bugfix - Initial Data Corruption Race Condition
 The Problem
-The track_history.json file contained incorrect, non-physical "garbage" values for all CAN-derived signals (e.g., canVehSpeed_kmph, shaftTorque_Nm, egoVelocity) for the first ~10 frames (Frame 0 to Frame 9). This indicated that the radar tracking algorithm was starting its processing with incomplete or uninitialized CAN data.
+The final output file, `track_history.json`, begins with incorrect, non-physical "garbage" values for all CAN-derived signals for the first 10 frames (Frame 0 to Frame 9). For example, `canVehSpeed_kmph: -3522163993.92981`.
 
 The Diagnosis
-A detailed analysis revealed a race condition in the synchronization between the can_logger_app and the radar_tracker. While the radar_tracker correctly waited for a can_logger_ready event, this event was being set prematurely by the can_logger_app.
-
-The processing_worker function in src/can_logger_app/data_processor.py was setting the can_logger_ready event immediately after processing the very first CAN signal and placing it into the shared_live_can_data dictionary. At this point, the dictionary contained data for only one signal, leaving all other critical signals unpopulated. When the radar_tracker unblocked, it attempted to read from this incomplete shared data structure, leading to the observed garbage values for the missing signals.
+A detailed analysis revealed this is a data initialization race condition.
+1.  **Consequence:** The `tracking.log` shows the tracking process receives these garbage values (`[RANSAC_EST] Input can_veh_speed_kmph: -3522163993.93`). This causes the EKF to fail and produce `nan` values (`[RANSAC_EST] EKF Corrected State (x_corr): [nan nan nan nan nan]`), which are logged as `null` in the JSON.
+2.  **Proof:** The raw `can_log.json` proves the *actual* data from the vehicle was normal at the same time (e.g., `"value": 1.5`).
+3.  **Cause:** The tracking process starts processing frames before the `can_logger_app` process has provided the first valid CAN messages. The `can_logger_ready` event (from Part 13) was being set prematurely, as it was triggered after only *one* CAN signal was received, not the *full set* of signals needed by the tracker.
+4.  **Recovery:** The system stabilizes by Frame 10, when the real CAN data stream "catches up" and valid data appears in `track_history.json` (e.g., `canVehSpeed_kmph: 3.1`).
 
 The Solution
-The synchronization logic was refined to ensure the can_logger_ready event is set only after a minimum set of critical CAN signals has been received and populated in the shared_live_can_data dictionary.
+The synchronization logic was refined to ensure the `can_logger_ready` event is set only after a *minimum set of critical CAN signals* has been received.
 
-Defined Critical Signals: A new configuration list, CRITICAL_SIGNALS_FOR_START, was added to src/can_logger_app/config.py. This list specifies the essential signals required for the tracker's initial ego-motion calculations:
-
-ETS_VCU_VehSpeed_Act_kmph
-
-ETS_MOT_ShaftTorque_Est_Nm
-
-ETS_VCU_AccelPedal_Act_perc (Updated from EstimatedGrade_Est_Deg per user request)
-
-Modified processing_worker: The logic in src/can_logger_app/data_processor.py was updated. The can_logger_ready.set() call is now guarded by a check that verifies if all signals listed in config.CRITICAL_SIGNALS_FOR_START are present as keys in the live_data_dict. This ensures that the radar_tracker only proceeds when a meaningful baseline of CAN data is available, preventing initial data corruption.
+1.  **Define Critical Signals:** A new configuration list, `CRITICAL_SIGNALS_FOR_START`, was added to `src/can_logger_app/config.py`. This list specifies the essential signals required for the tracker's initial calculations (e.g., `ETS_VCU_VehSpeed_Act_kmph`, `ETS_MOT_ShaftTorque_Est_Nm`, `ETS_VCU_AccelPedal_Act_perc`).
+2.  **Modify `processing_worker`:** The logic in `src/can_logger_app/data_processor.py` was updated. The `can_logger_ready.set()` call is now guarded by a check: `if all(sig in live_data_dict for sig in config.CRITICAL_SIGNALS_FOR_START):`. This ensures the tracker only proceeds when a meaningful baseline of CAN data is available, preventing the initial data corruption.
 
 Development Rules
 When working in the tests folder, do not edit any file outside of it.
