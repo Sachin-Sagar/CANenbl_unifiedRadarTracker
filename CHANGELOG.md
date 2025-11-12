@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4] - 2025-11-12
+
+### Added
+- **Robust Ego-Motion Estimation:** Implemented a feature to improve the robustness of the ego-motion estimation algorithm. The tracker now checks the `ETS_VCU_imuProc_imuStuck_B` CAN signal. If this flag is true (indicating a faulty IMU), the algorithm will disregard the `EstimatedGrade_Est_Deg` signal, preventing corrupted data from affecting the vehicle's dynamics calculations.
+
 ## [1.3.3] - 2025-11-10
 
 ### Fixed

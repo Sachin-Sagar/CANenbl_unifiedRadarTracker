@@ -100,6 +100,67 @@ def mock_can_logger_delayed_start(shared_dict, ready_event, shutdown_flag, outpu
     print("[CAN Mock Delayed] Shutdown flag set, exiting.")
 
 
+def mock_can_logger_numpy_process(shared_dict, ready_event, shutdown_flag, output_dir, expected_values):
+    """
+    Simulates the CAN logger, but intentionally provides numpy.float64 types
+    to test for inter-process data corruption.
+    """
+    print(f"[CAN Mock Numpy] Starting, providing numpy.float64 data.")
+    try:
+        start_time = time.time()
+        ready_event.set()
+        print("[CAN Mock Numpy] Ready event set.")
+
+        while not shutdown_flag.is_set():
+            current_time = time.time() - start_time
+            
+            # Intentionally use numpy.float64 to test the corruption fix
+            shared_dict['ETS_VCU_VehSpeed_Act_kmph'] = (np.float64(expected_values['speed']), current_time)
+            shared_dict['ETS_MOT_ShaftTorque_Est_Nm'] = (np.float64(expected_values['torque']), current_time)
+            shared_dict['EstimatedGrade_Est_Deg'] = (np.float64(expected_values['grade']), current_time)
+            
+            time.sleep(0.01)
+
+        print("[CAN Mock Numpy] Shutdown flag set, exiting.")
+    except Exception as e:
+        print(f"[CAN Mock Numpy] Fatal error: {e}")
+
+
+def mock_can_logger_imu_stuck_scenario(shared_dict, ready_event, shutdown_flag, output_dir, expected_values, flip_frame):
+    """
+    Simulates a scenario where the IMU 'stuck' flag flips mid-run.
+    """
+    print(f"[CAN Mock IMU Stuck] Starting. IMU stuck flag will flip at frame {flip_frame}.")
+    try:
+        start_time = time.time()
+        ready_event.set()
+        # We need to simulate frame progression. Since this process runs faster than the
+        # radar process, we'll use a simple time-based progression.
+        # The radar runs at ~20 FPS (50ms interval).
+        
+        while not shutdown_flag.is_set():
+            current_time = time.time()
+            elapsed_time = current_time - start_time
+            frame_counter = int(elapsed_time / 0.05) # Estimate current frame index
+
+            imu_stuck_flag = 1 if frame_counter >= flip_frame else 0
+
+            shared_dict['ETS_VCU_VehSpeed_Act_kmph'] = (expected_values['speed'], current_time)
+            shared_dict['ETS_MOT_ShaftTorque_Est_Nm'] = (expected_values['torque'], current_time)
+            shared_dict['EstimatedGrade_Est_Deg'] = (expected_values['grade'], current_time)
+            shared_dict['ETS_VCU_imuProc_imuStuck_B'] = (imu_stuck_flag, current_time)
+            
+            # Log the changeover
+            if frame_counter == flip_frame:
+                print(f"[CAN Mock IMU Stuck] Frame {frame_counter}, IMU Stuck Flag flipped to: {imu_stuck_flag}")
+
+            time.sleep(0.01) # Update faster than the radar consumes
+
+        print("[CAN Mock IMU Stuck] Shutdown flag set, exiting.")
+    except Exception as e:
+        print(f"[CAN Mock IMU Stuck] Fatal error: {e}")
+
+
 # --- Mock Radar Tracker Process ---
 def mock_radar_tracker_process(shared_dict, ready_event, shutdown_flag, output_dir, num_frames, radar_log_path):
     """
@@ -171,18 +232,12 @@ def mock_radar_tracker_process(shared_dict, ready_event, shutdown_flag, output_d
             # Get CAN data from shared dictionary
             can_data_for_frame = {}
             if shared_dict:
+                # Create a clean copy of the shared data for this frame
                 temp_can_data = dict(shared_dict)
-                speed_tuple = temp_can_data.get('ETS_VCU_VehSpeed_Act_kmph')
-                if speed_tuple:
-                    can_data_for_frame['ETS_VCU_VehSpeed_Act_kmph'] = float(speed_tuple[0])
-
-                torque_tuple = temp_can_data.get('ETS_MOT_ShaftTorque_Est_Nm')
-                if torque_tuple:
-                    can_data_for_frame['ETS_MOT_ShaftTorque_Est_Nm'] = float(torque_tuple[0])
-
-                grade_tuple = temp_can_data.get('EstimatedGrade_Est_Deg')
-                if grade_tuple:
-                    can_data_for_frame['EstimatedGrade_Est_Deg'] = float(grade_tuple[0])
+                for signal_name, value_tuple in temp_can_data.items():
+                    if value_tuple and isinstance(value_tuple, (list, tuple)) and len(value_tuple) > 0:
+                        # The mock loggers store data as (value, timestamp)
+                        can_data_for_frame[signal_name] = float(value_tuple[0])
 
             fhist_frame = adapt_frame_data_to_fhist(frame_data, current_timestamp_ms, can_signals=can_data_for_frame)
             
@@ -411,6 +466,144 @@ class TestLiveDataPipeline(unittest.TestCase):
         self.assertGreater(first_frame['egoVelocity'][0], 0, "First frame egoVx should be positive")
 
         print(f"Startup race condition test finished successfully. Output files are in: {self.test_output_dir}")
+
+    def test_numpy_float64_corruption_fix(self):
+        """
+        Tests that a numpy.float64 value, which caused corruption, is now
+        handled correctly when passed through the multiprocessing shared dictionary.
+        """
+        manager = multiprocessing.Manager()
+        shared_live_can_data = manager.dict()
+        can_logger_ready = manager.Event()
+        shutdown_flag = manager.Event()
+
+        expected_values = {
+            'speed': np.float64(9.36),    # A value that was known to corrupt
+            'torque': np.float64(12.5),
+            'grade': np.float64(0.5)
+        }
+        expected_ego_vx_mps = expected_values['speed'] / 3.6
+
+        radar_log_path = 'tests/test_data/sample_data/radar_log.json'
+        self.assertTrue(os.path.exists(radar_log_path))
+
+        # Use the special numpy-based mock CAN logger
+        can_process = multiprocessing.Process(
+            target=mock_can_logger_numpy_process,
+            args=(shared_live_can_data, can_logger_ready, shutdown_flag, self.test_output_dir, expected_values)
+        )
+
+        num_frames = 30
+        radar_process = multiprocessing.Process(
+            target=mock_radar_tracker_process,
+            args=(shared_live_can_data, can_logger_ready, shutdown_flag, self.test_output_dir, num_frames, radar_log_path)
+        )
+
+        print("Starting Numpy Corruption Test...")
+        can_process.start()
+        radar_process.start()
+
+        can_process.join()
+        radar_process.join()
+
+        self.assertTrue(os.path.exists(self.track_history_file))
+        
+        with open(self.track_history_file, 'r') as f:
+            history = json.load(f)
+        
+        radar_frames = history['radarFrames']
+        self.assertGreater(len(radar_frames), 10, "Ensure enough frames were processed") # Ensure enough frames were processed
+
+        # Check the last frame for the correct, uncorrupted CAN data
+        last_frame = radar_frames[-1]
+        
+        self.assertIn('canVehSpeed_kmph', last_frame)
+        self.assertIsNotNone(last_frame['canVehSpeed_kmph'])
+        # This is the critical assertion: is the value correct or corrupted?
+        self.assertAlmostEqual(last_frame['canVehSpeed_kmph'], expected_values['speed'], delta=0.1, msg="Numpy float64 speed value was corrupted")
+
+        self.assertIn('shaftTorque_Nm', last_frame)
+        self.assertIsNotNone(last_frame['shaftTorque_Nm'])
+        self.assertAlmostEqual(last_frame['shaftTorque_Nm'], expected_values['torque'], delta=0.1, msg="Numpy float64 torque value was corrupted")
+
+        self.assertIn('roadGrade_Deg', last_frame)
+        self.assertIsNotNone(last_frame['roadGrade_Deg'])
+        self.assertAlmostEqual(last_frame['roadGrade_Deg'], expected_values['grade'], delta=0.1, msg="Numpy float64 grade value was corrupted")
+
+        print(f"Numpy corruption test finished successfully. Output files are in: {self.test_output_dir}")
+
+    def test_imu_stuck_flag_ignores_grade(self):
+        """
+        Tests that when the 'ETS_VCU_imuProc_imuStuck_B' flag is set to 1,
+        the road grade is ignored by the tracker, resulting in a null value
+        in the final output.
+        """
+        manager = multiprocessing.Manager()
+        shared_live_can_data = manager.dict()
+        can_logger_ready = manager.Event()
+        shutdown_flag = manager.Event()
+
+        expected_values = {
+            'speed': 40.0,
+            'torque': 15.0,
+            'grade': 5.0  # A non-zero grade
+        }
+        
+        radar_log_path = 'tests/test_data/sample_data/radar_log.json'
+        self.assertTrue(os.path.exists(radar_log_path))
+
+        # The test data file only has ~16 frames.
+        num_frames = 15
+        flip_frame = 8 # The frame where the IMU stuck flag will be set to 1
+
+        # Use the new scenario-based mock CAN logger
+        can_process = multiprocessing.Process(
+            target=mock_can_logger_imu_stuck_scenario,
+            args=(shared_live_can_data, can_logger_ready, shutdown_flag, self.test_output_dir, expected_values, flip_frame)
+        )
+
+        radar_process = multiprocessing.Process(
+            target=mock_radar_tracker_process,
+            args=(shared_live_can_data, can_logger_ready, shutdown_flag, self.test_output_dir, num_frames, radar_log_path)
+        )
+
+        print("Starting IMU Stuck Flag Test...")
+        can_process.start()
+        radar_process.start()
+
+        can_process.join()
+        radar_process.join()
+
+        self.assertTrue(os.path.exists(self.track_history_file))
+        
+        with open(self.track_history_file, 'r') as f:
+            history = json.load(f)
+        
+        radar_frames = history['radarFrames']
+        self.assertGreaterEqual(len(radar_frames), num_frames - 5, "Not enough frames were processed")
+
+        # --- ROBUST VERIFICATION ---
+        # Find the first frame where the grade is null
+        first_null_idx = -1
+        for i, frame in enumerate(radar_frames):
+            if frame.get('roadGrade_Deg') is None:
+                first_null_idx = i
+                break
+        
+        # 1. Assert that the grade was not null from the very beginning
+        self.assertNotEqual(first_null_idx, 0, "Grade should not be null in the first frame.")
+        self.assertTrue(first_null_idx != -1, "Grade was never set to null, the feature did not work.")
+
+        # 2. Assert that the flip happened near the expected frame, allowing for some timing skew
+        self.assertTrue(flip_frame - 4 <= first_null_idx <= flip_frame + 4, 
+                        f"Grade became null at frame {first_null_idx}, which is too far from the expected flip frame of {flip_frame}.")
+
+        # 3. Assert that the frame right before the flip has a valid grade
+        frame_before = radar_frames[first_null_idx - 1]
+        self.assertIsNotNone(frame_before['roadGrade_Deg'], f"Grade should be valid in frame {first_null_idx - 1}, right before it became null.")
+        self.assertAlmostEqual(frame_before['roadGrade_Deg'], expected_values['grade'], delta=0.1)
+
+        print(f"IMU stuck flag test finished successfully. Grade became null at frame {first_null_idx}. Output files are in: {self.test_output_dir}")
 
 
 if __name__ == '__main__':

@@ -142,6 +142,10 @@ def create_visualization_data(all_tracks, fhist, params=None):
         # 1. Safely get the can_signals dictionary from the frame object
         can_signals = getattr(frame, 'can_signals', {})
 
+        road_grade = getattr(frame, 'EstimatedGrade_Est_Deg', None)
+        if road_grade is not None and not np.isfinite(road_grade):
+            road_grade = None
+
         # 2. Build the frame_output dictionary using getattr for frame object properties
         #    and .get() for the can_signals dictionary
         frame_output = {
@@ -155,7 +159,7 @@ def create_visualization_data(all_tracks, fhist, params=None):
             "AccelPedal_Act_perc": can_signals.get('ETS_VCU_AccelPedal_Act_perc', None),
             "shaftTorque_Nm": can_signals.get('ETS_MOT_ShaftTorque_Est_Nm', None),
             "engagedGear": can_signals.get('ETS_VCU_Gear_Engaged_St_enum', None),
-            "roadGrade_Deg": can_signals.get('EstimatedGrade_Est_Deg', None),
+            "roadGrade_Deg": road_grade,
             
             # --- Non-CAN fields ---
             "correctedEgoSpeed_mps": getattr(frame, 'correctedEgoSpeed_mps', None),

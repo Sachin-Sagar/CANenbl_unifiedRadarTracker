@@ -300,6 +300,47 @@
                 <li><strong>Feature:</strong> To support multiple types of CAN hardware, the static, OS-based configuration was replaced with an interactive prompt at startup.</li>
                 <li><strong>Implementation:</strong> The user can select between <code>PEAK</code> and <code>Kvaser</code>. The application then dynamically determines the correct <code>python-can</code> backend (<code>pcan</code>, <code>socketcan</code>, or <code>kvaser</code>) and channel configuration for the chosen hardware and host OS, improving flexibility and usability.</li>
             </ul>
+
+            <h3>6. Robustness Feature: "IMU Stuck" Flag</h3>
+            <ul>
+                <li><strong>Problem:</strong> The ego-motion estimation algorithm relies on CAN signals like road grade to accurately model vehicle dynamics. If the vehicle's IMU sensor is faulty or "stuck," it could broadcast incorrect grade data, compromising the integrity of the tracking algorithm.</li>
+                <li><strong>Solution:</strong> A new layer of robustness was added to the data fusion pipeline. The system now monitors the <code>ETS_VCU_imuProc_imuStuck_B</code> signal. If this flag is detected, the tracker's logic intercepts the incoming road grade value for that frame and replaces it with a null value (<code>np.nan</code>) before it can be passed to the ego-motion estimator. This ensures that the algorithm defaults to a safe, flat-road assumption instead of being corrupted by faulty sensor data.</li>
+            </ul>
+            <div class="diagram-container">
+                <h4 style="color: var(--accent-orange); text-align:center;">"IMU Stuck" Decision Flow</h4>
+                <svg viewBox="0 0 800 300" xmlns="http://www.w3.org/2000/svg">
+                    <defs><marker id="arrow-tech" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7aa2f7" /></marker></defs>
+                    <style>
+                        .flow-box { fill: #2a2a2a; stroke: #414868; stroke-width: 2; }
+                        .decision-box { fill: #4a2c2c; stroke: #f7768e; stroke-width: 2; }
+                        .flow-text { font-family: sans-serif; font-size: 14px; fill: #c0caf5; text-anchor: middle; }
+                        .flow-path { stroke: #7aa2f7; stroke-width: 2; fill: none; marker-end: url(#arrow-tech); }
+                        .label-text { font-family: sans-serif; font-size: 12px; fill: #9a9a9a; text-anchor: middle; }
+                    </style>
+                    
+                    <rect x="50" y="100" width="200" height="60" rx="5" class="flow-box"/>
+                    <text x="150" y="125" class="flow-text">Frame Arrives</text>
+                    <text x="150" y="145" class="label-text">(Contains `imu_stuck` flag)</text>
+
+                    <path d="M 350 130 L 450 80 L 550 130 L 450 180 Z" class="decision-box"/>
+                    <text x="450" y="135" class="flow-text">Is `imu_stuck` == True?</text>
+                    <line x1="250" y1="130" x2="350" y2="130" class="flow-path"/>
+
+                    <rect x="375" y="210" width="150" height="50" rx="5" class="flow-box"/>
+                    <text x="450" y="240" class="flow-text">Set grade = null</text>
+                    <path d="M 450 180 V 210" class="flow-path"/>
+                    <text x="480" y="200" class="label-text">Yes</text>
+
+                    <path d="M 550 130 H 650" class="flow-path"/>
+                    <text x="600" y="120" class="label-text">No</text>
+
+                    <path d="M 650 130 V 230" class="flow-path"/>
+                    <path d="M 525 235 H 575" class="flow-path"/>
+                    
+                    <rect x="575" y="210" width="175" height="50" rx="5" class="flow-box"/>
+                    <text x="662.5" y="240" class="flow-text">Use Grade in Estimator</text>
+                </svg>
+            </div>
         </section>
 
         <section id="data-flow">

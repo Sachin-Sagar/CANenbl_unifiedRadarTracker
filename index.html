@@ -162,6 +162,60 @@
                 <li><strong>Problem:</strong> Numeric values in the final <code>can_log.json</code> and <code>track_history.json</code> files, as well as in the live shared data, would appear as massive, incorrect numbers.</li>
                 <li><strong>Solution:</strong> The root cause was the use of non-standard numeric types (like <code>numpy.float64</code>) in data structures that were passed between processes or serialized to JSON. The entire data pipeline was audited and fixed to explicitly cast all numeric data to a standard Python <code>float()</code> at every stage: before being placed in the shared dictionary, after interpolation, and before being written to a file. This ensures data integrity across the entire system.</li>
             </ul>
+
+            <h3>Robustness Feature: "IMU Stuck" Flag</h3>
+            <ul>
+                <li><strong>Goal:</strong> To improve the robustness of the vehicle ego-motion estimation by ignoring potentially faulty CAN signals when the vehicle's IMU reports a malfunction.</li>
+                <li><strong>Implementation:</strong>
+                    <ol>
+                        <li>The <code>ETS_VCU_imuProc_imuStuck_B</code> CAN signal is now monitored and propagated to the radar tracker as an <code>imu_stuck</code> flag on each data frame.</li>
+                        <li>Inside the tracker, before the ego-motion algorithm is run, this flag is checked.</li>
+                        <li>If the flag is <code>True</code>, the <code>EstimatedGrade_Est_Deg</code> value for that frame is overwritten with <code>np.nan</code>, effectively nullifying it.</li>
+                        <li>The JSON exporter was updated to read this final, processed grade value, ensuring the final log correctly shows <code>null</code> when the data is ignored.</li>
+                    </ol>
+                </li>
+            </ul>
+            <div class="diagram-container">
+                <h4>"IMU Stuck" Logic Flow</h4>
+                <svg viewBox="0 0 800 350" xmlns="http://www.w3.org/2000/svg">
+                    <defs><marker id="arrow-dark" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4fc3f7" /></marker></defs>
+                    <style>
+                        .flow-box { fill: #3c3c3c; stroke: #555; }
+                        .decision-box { fill: #4a2c2c; stroke: #ff8a65; }
+                        .flow-text { font-family: sans-serif; font-size: 14px; fill: #ccc; text-anchor: middle; }
+                        .flow-path { stroke: #4fc3f7; stroke-width: 2; fill: none; marker-end: url(#arrow-dark); }
+                        .label-text { font-family: sans-serif; font-size: 12px; fill: #aaa; text-anchor: middle; }
+                    </style>
+                    
+                    <!-- Start -->
+                    <rect x="50" y="50" width="200" height="60" rx="5" class="flow-box"/>
+                    <text x="150" y="80" class="flow-text">Frame with `imu_stuck` flag</text>
+
+                    <!-- Decision -->
+                    <path d="M 350 80 L 450 30 L 550 80 L 450 130 Z" class="decision-box"/>
+                    <text x="450" y="85" class="flow-text">Is `imu_stuck` True?</text>
+                    <line x1="250" y1="80" x2="350" y2="80" class="flow-path"/>
+
+                    <!-- Yes Path -->
+                    <rect x="375" y="160" width="150" height="50" rx="5" class="flow-box"/>
+                    <text x="450" y="190" class="flow-text">Set grade = null</text>
+                    <path d="M 450 130 V 160" class="flow-path"/>
+                    <text x="480" y="150" class="label-text">Yes</text>
+
+                    <!-- No Path -->
+                    <path d="M 550 80 H 650" class="flow-path"/>
+                    <text x="600" y="70" class="label-text">No</text>
+
+                    <!-- Merge -->
+                    <path d="M 650 80 V 240" class="flow-path"/>
+                    <path d="M 450 210 V 240" class="flow-path"/>
+                    
+                    <!-- Final Step -->
+                    <rect x="575" y="240" width="150" height="60" rx="5" class="flow-box"/>
+                    <text x="650" y="265" class="flow-text">Call Ego-Motion</text>
+                    <text x="650" y="285" class="flow-text">Estimator</text>
+                </svg>
+            </div>
         </div>
 
         <div class="card">

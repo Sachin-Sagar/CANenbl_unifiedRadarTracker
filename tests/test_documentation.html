@@ -3,113 +3,385 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CAN Logger Test Suite Documentation</title>
+    <title>Test Suite Documentation</title>
     <style>
-        body { font-family: sans-serif; line-height: 1.6; margin: 2em; background-color: #f8f9fa; color: #212529; }
-        h1, h2, h3 { color: #0056b3; }
-        h1 { border-bottom: 2px solid #dee2e6; padding-bottom: 0.5em; }
-        code { background-color: #e9ecef; padding: 0.2em 0.4em; border-radius: 3px; font-family: monospace; }
-        .container { max-width: 800px; margin: auto; background-color: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        ul { padding-left: 20px; }
-        li { margin-bottom: 0.5em; }
+        :root {
+            --bg-color: #f8f9fa;
+            --text-color: #212529;
+            --heading-color: #003366;
+            --card-bg: #ffffff;
+            --card-border: #dee2e6;
+            --code-bg: #e9ecef;
+            --accent-color: #007bff;
+            --shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+            line-height: 1.7; 
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            border-bottom: 2px solid var(--card-border);
+            padding-bottom: 20px;
+            margin-bottom: 40px;
+        }
+        h1 { 
+            color: var(--heading-color);
+            font-size: 2.5em;
+            margin-bottom: 0;
+        }
+        h2, h3 { 
+            color: var(--heading-color);
+            border-bottom: 1px solid var(--card-border);
+            padding-bottom: 10px;
+            margin-top: 40px;
+        }
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: var(--shadow);
+        }
+        code { 
+            background-color: var(--code-bg); 
+            padding: 3px 6px; 
+            border-radius: 4px; 
+            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+        }
+        pre { 
+            background-color: var(--code-bg); 
+            padding: 15px; 
+            border-radius: 6px; 
+            white-space: pre-wrap; 
+            word-wrap: break-word;
+            border: 1px solid #ddd;
+        }
+        ul, ol { 
+            padding-left: 25px;
+        }
+        li {
+            margin-bottom: 10px;
+        }
+        strong {
+            color: var(--heading-color);
+        }
+        .diagram {
+            text-align: center;
+            margin: 30px 0;
+            padding: 20px;
+            background-color: #fdfdfd;
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+        }
+        .diagram svg {
+            width: 100%;
+            max-width: 800px;
+            height: auto;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>CAN Logger Test Suite Documentation</h1>
 
-        <h2>Overview</h2>
-        <p>This document describes the test suite for the <code>CANenbl_unifiedRadarTracker</code> project. The primary purpose of these tests is to validate the functionality and performance of the CAN logging and processing components, with a special focus on the dual-pipeline architecture designed to handle high-frequency and low-frequency CAN signals in parallel.</p>
+<div class="container">
+    <header>
+        <h1>Test Suite Documentation</h1>
+        <p>An overview of the test suite for the <code>CANenbl_unifiedRadarTracker</code> project.</p>
+    </header>
 
+    <section class="card">
+        <h2>Introduction</h2>
+        <p>This document describes the test suite for the <code>CANenbl_unifiedRadarTracker</code> project. The primary purpose of these tests is to validate the functionality and performance of the CAN logging and processing components, with a special focus on the dual-pipeline architecture and the live data integration with the radar tracker.</p>
+    </section>
+
+    <section class="card">
+        <h2>Test Invocation and Application Interaction</h2>
+        <p>The test suite is designed to validate the core logic of the main application without requiring live hardware or a full application startup. This is achieved through a combination of direct function/class imports and strategic mocking of hardware interfaces. The tests act as an orchestrator, calling the real application code with controlled inputs and verifying the outputs.</p>
+        
+        <div class="diagram">
+            <h3>Test-to-Application Process Flow</h3>
+            <svg viewBox="0 0 800 450" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="14">
+                <style>
+                    .box { fill: #eaf4ff; stroke: #0056b3; stroke-width: 1.5; }
+                    .test-box { fill: #fffbe6; stroke: #ffc107; stroke-width: 1.5; }
+                    .app-box { fill: #e6f9f0; stroke: #28a745; stroke-width: 1.5; }
+                    .arrow { stroke: #333; stroke-width: 1.5; fill: none; }
+                    .arrow-head { fill: #333; }
+                    .text-label { fill: #212529; text-anchor: middle; }
+                    .sub-text { font-size: 12px; fill: #555; }
+                    .dashed-arrow { stroke-dasharray: 5, 5; }
+                </style>
+                <defs>
+                    <marker id="arrowhead-diag3" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" class="arrow-head" />
+                    </marker>
+                </defs>
+
+                <!-- Test Suite Area -->
+                <rect x="10" y="10" width="380" height="430" rx="15" fill="#f8f9fa" stroke="#ced4da"/>
+                <text x="200" y="40" class="text-label" font-size="18" font-weight="bold">Test Suite (/tests)</text>
+
+                <!-- App Code Area -->
+                <rect x="410" y="10" width="380" height="430" rx="15" fill="#f8f9fa" stroke="#ced4da"/>
+                <text x="600" y="40" class="text-label" font-size="18" font-weight="bold">Main Application (/src)</text>
+
+                <!-- Test Runner -->
+                <rect x="40" y="70" width="320" height="50" rx="10" class="test-box"/>
+                <text x="200" y="100" class="text-label">1. Test Runner (unittest)</text>
+                
+                <!-- Test Case -->
+                <rect x="40" y="150" width="320" height="70" rx="10" class="test-box"/>
+                <text x="200" y="180" class="text-label">2. Test Case</text>
+                <text x="200" y="200" class="sub-text">(e.g., test_live_data_pipeline.py)</text>
+                <path d="M 200 120 V 150" class="arrow" marker-end="url(#arrowhead-diag3)"/>
+
+                <!-- Mock Objects -->
+                <rect x="40" y="250" width="320" height="70" rx="10" class="test-box"/>
+                <text x="200" y="280" class="text-label">3. Mock Objects Created</text>
+                <text x="200" y="300" class="sub-text">(Mock CAN Bus, Shared Dict, etc.)</text>
+                <path d="M 200 220 V 250" class="arrow" marker-end="url(#arrowhead-diag3)"/>
+
+                <!-- App Modules -->
+                <rect x="440" y="150" width="320" height="70" rx="10" class="app-box"/>
+                <text x="600" y="180" class="text-label">Application Logic</text>
+                <text x="600" y="200" class="sub-text">(tracker.py, data_adapter.py)</text>
+
+                <!-- Hardware Interface -->
+                <rect x="440" y="250" width="320" height="70" rx="10" class="app-box"/>
+                <text x="600" y="280" class="text-label">Hardware Interface</text>
+                <text x="600" y="300" class="sub-text">(can.interface.Bus)</text>
+
+                <!-- Import Arrow -->
+                <path d="M 360 185 H 440" class="arrow" marker-end="url(#arrowhead-diag3)"/>
+                <text x="400" y="175" class="sub-text">Imports</text>
+
+                <!-- Mocking Arrow -->
+                <path d="M 360 285 H 440" class="arrow dashed-arrow" marker-end="url(#arrowhead-diag3)"/>
+                <text x="400" y="275" class="sub-text">Replaces / Mocks</text>
+                
+                <!-- Assertion -->
+                <rect x="40" y="350" width="320" height="50" rx="10" class="test-box"/>
+                <text x="200" y="380" class="text-label">4. Assert Results</text>
+                <path d="M 200 320 V 350" class="arrow" marker-end="url(#arrowhead-diag3)"/>
+                <path d="M 440 185 C 420 365, 360 365, 360 365" class="arrow" marker-end="url(#arrowhead-diag3)"/>
+                <text x="420" y="340" class="sub-text">Returns Result</text>
+
+            </svg>
+        </div>
+
+        <h3>Key Interaction Patterns</h3>
+        <ul>
+            <li><strong>Direct Import:</strong> Test scripts directly import functions and classes from the <code>src</code> directory (e.g., <code>from src.radar_tracker.tracking.tracker import RadarTracker</code>). This allows the tests to execute the actual application logic in a controlled environment.</li>
+            <li><strong>Multiprocessing Simulation:</strong> For complex integration tests like <code>test_live_data_pipeline.py</code>, the test script spawns separate processes using <code>multiprocessing.Process</code>. The <code>target</code> of these processes are test-specific functions (e.g., <code>mock_can_logger_process</code>) which then call the imported application code. This accurately simulates the multi-process architecture of the live application, allowing for the testing of race conditions and inter-process communication.</li>
+            <li><strong>Mocking Hardware:</strong> Components that interface with physical hardware, such as the <code>can.interface.Bus</code>, are replaced with mock objects. These mocks provide a predictable stream of pre-recorded data, isolating the application logic from hardware dependencies and making the tests deterministic and repeatable.</li>
+        </ul>
+    </section>
+
+    <section class="card">
         <h2>Test Scripts</h2>
         <p>The main test scripts are located in the <code>tests/test_cases/</code> directory.</p>
 
-        <h3>1. <code>test_dual_pipeline_simulation.py</code></h3>
+        <h3><code>test_dual_pipeline_simulation.py</code></h3>
         <ul>
             <li><strong>Purpose:</strong> This is the most critical test for debugging the core CAN processing logic. It simulates the entire dual-pipeline system using a pre-recorded log file (<code>2w_sample.log</code>) instead of live hardware.</li>
             <li><strong>Functionality:</strong>
                 <ul>
                     <li>It reads a BusMaster <code>.log</code> file.</li>
                     <li>It acts as a dispatcher, sending CAN messages to either a high-frequency or low-frequency queue based on their message ID.</li>
-                    <li>It starts two independent worker processes to consume these queues, perfectly mimicking the live application's architecture.</li>
+                    <li>It starts two independent worker processes to consume these queues, mimicking the live application's architecture.</li>
                     <li>It verifies that the signals listed in <code>master_sigList.txt</code> are correctly decoded and processed by the appropriate worker.</li>
                 </ul>
             </li>
-            <li><strong>Key Feature:</strong> The script uses a special <code>_debug_processing_worker</code> function that generates detailed, separate log files for each pipeline (<code>worker_1_high_freq.log</code> and <code>worker_2_low_freq.log</code>). This allows for isolated analysis of each worker's behavior, making it invaluable for diagnosing issues related to signal decoding, data corruption, or timing.</li>
+            <li><strong>Key Feature:</strong> The script uses a special <code>_debug_processing_worker</code> function that generates detailed, separate log files for each pipeline (<code>worker_1_high_freq.log</code> and <code>worker_2_low_freq.log</code>). This allows for isolated analysis of each worker's behavior.</li>
         </ul>
 
-        <h3>2. <code>test_can_service.py</code></h3>
+        <h3><code>test_live_data_pipeline.py</code></h3>
+        <ul>
+            <li><strong>Purpose:</strong> To thoroughly test the integration of the CAN logger application with the radar tracker in a live-like multiprocessing environment. It ensures data integrity and correct behavior of the data pipeline from CAN signal acquisition to final track history output.</li>
+        </ul>
+        <div class="diagram">
+            <h3>Live Data Pipeline Test Architecture</h3>
+            <svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="14">
+                <!-- Styles for the diagram -->
+                <style>
+                    .box { fill: #eaf4ff; stroke: #0056b3; stroke-width: 1.5; }
+                    .process-box { fill: #fff0e6; stroke: #d9534f; stroke-width: 1.5; }
+                    .arrow { stroke: #333; stroke-width: 1.5; fill: none; }
+                    .arrow-head { fill: #333; }
+                    .text-label { fill: #212529; text-anchor: middle; }
+                    .sub-text { font-size: 12px; fill: #555; }
+                </style>
+                
+                <!-- Mock CAN Logger Process -->
+                <rect x="50" y="50" width="200" height="100" rx="10" class="process-box"/>
+                <text x="150" y="90" class="text-label">Mock CAN Logger</text>
+                <text x="150" y="110" class="text-label sub-text">(multiprocessing.Process)</text>
+
+                <!-- Mock Radar Tracker Process -->
+                <rect x="550" y="50" width="200" height="100" rx="10" class="process-box"/>
+                <text x="650" y="90" class="text-label">Mock Radar Tracker</text>
+                <text x="650" y="110" class="text-label sub-text">(multiprocessing.Process)</text>
+
+                <!-- Shared Dictionary -->
+                <rect x="300" y="180" width="200" height="80" rx="10" class="box"/>
+                <text x="400" y="215" class="text-label">Shared Dictionary</text>
+                <text x="400" y="235" class="text-label sub-text">(Manager.dict)</text>
+
+                <!-- CAN Logger Ready Event -->
+                <rect x="300" y="50" width="200" height="60" rx="10" class="box"/>
+                <text x="400" y="85" class="text-label">Ready Event</text>
+
+                <!-- Arrows -->
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" class="arrow-head" />
+                    </marker>
+                </defs>
+                <!-- CAN -> Shared Dict -->
+                <path d="M 150 150 Q 150 220, 300 220" class="arrow" marker-end="url(#arrowhead)"/>
+                <!-- Shared Dict -> Radar -->
+                <path d="M 500 220 Q 650 220, 650 150" class="arrow" marker-end="url(#arrowhead)"/>
+                <!-- CAN -> Event -->
+                <path d="M 250 80 H 300" class="arrow" marker-end="url(#arrowhead)"/>
+                <!-- Event -> Radar -->
+                <path d="M 500 80 H 550" class="arrow" marker-end="url(#arrowhead)"/>
+            </svg>
+        </div>
+        <ul>
+            <li><strong>Test Cases:</strong>
+                <ul>
+                    <li><code>test_data_integrity_in_live_pipeline</code>: Verifies that constant CAN signal values (speed, torque, grade) are correctly passed from a mock CAN logger to the radar tracker and appear uncorrupted in the final <code>track_history.json</code>.</li>
+                    <li><code>test_startup_race_condition_fix</code>: Ensures the radar tracker correctly waits for the CAN logger to be ready before processing frames, preventing initial "garbage" data from corrupting the first few frames.</li>
+                    <li><code>test_numpy_float64_corruption_fix</code>: Specifically tests that <code>numpy.float64</code> values, which previously caused data corruption when passed through <code>multiprocessing.Manager.dict()</code>, are now correctly handled and appear uncorrupted in the final output.</li>
+                    <li><code>test_imu_stuck_flag_ignores_grade</code>: Verifies that when the <code>ETS_VCU_imuProc_imuStuck_B</code> CAN signal is set to 1 (indicating a stuck IMU), the radar tracker correctly ignores the <code>EstimatedGrade_Est_Deg</code> signal, resulting in a <code>null</code> value for road grade in the final <code>track_history.json</code>. This test uses a mock CAN logger that flips the <code>imuStuck</code> flag mid-run.</li>
+                </ul>
+            </li>
+        </ul>
+
+        <h3><code>test_can_service.py</code></h3>
         <ul>
             <li><strong>Purpose:</strong> To run an integration test on an alternative or legacy version of the CAN handling logic, specifically the <code>LiveCANManager</code>.</li>
             <li><strong>Functionality:</strong>
                 <ul>
                     <li>It uses mocks to create a virtual CAN bus that produces predictable messages.</li>
                     <li>It starts the <code>LiveCANManager</code> and allows it to process the mock messages.</li>
-                    <li>It then simulates a radar worker requesting CAN data at a specific timestamp and verifies that the signal interpolation logic produces the correct value.</li>
+                    <li>It then verifies that the signal interpolation logic produces the correct value.</li>
                 </ul>
             </li>
         </ul>
 
-        <h3>3. <code>test_can_log_playback.py</code></h3>
+        <h3><code>test_can_log_playback.py</code></h3>
         <ul>
             <li><strong>Purpose:</strong> This script is a utility module rather than a standalone test. Its main purpose is to provide a reliable way to parse CAN log files.</li>
             <li><strong>Functionality:</strong> It contains the <code>parse_busmaster_log</code> function, which reads a raw <code>.log</code> file and converts each line into a structured <code>can.Message</code> object. This utility is used by <code>test_dual_pipeline_simulation.py</code> to feed the simulation.</li>
         </ul>
-        
-        <h3>4. <code>tests_main.py</code></h3>
+
+        <h3><code>tests_main.py</code></h3>
         <ul>
             <li><strong>Purpose:</strong> To act as a centralized test runner for the entire suite.</li>
-            <li><strong>Functionality:</strong> It uses Python's built-in <code>unittest</code> library to automatically discover all files matching the pattern <code>test_*.py</code> within the <code>test_cases</code> directory and execute them. This provides a convenient way to run all tests at once and get a consolidated result.</li>
+            <li><strong>Functionality:</strong> It uses Python's built-in <code>unittest</code> library to automatically discover and execute all test files matching the pattern <code>test_*.py</code> within the <code>test_cases</code> directory.</li>
         </ul>
+    </section>
 
-        <h3>5. <code>test_live_data_pipeline.py</code></h3>
+    <section class="card">
+        <h2>Verifying the Dual-Pipeline Logic</h2>
+        <p>A critical bug was identified where the main application was unable to log low-frequency (100ms) signals, while high-frequency (10ms) signals were logged correctly. The initial investigation confirmed the dual-pipeline code in <code>src/can_logger_app</code> appeared logically correct, and the issue was traced to a missing <code>master_sigList.txt</code> file in the <code>input/</code> directory.</p>
+        <p>To confirm this fix without requiring live hardware, a temporary test script (<code>test_main_app_logic.py</code>) was created.</p>
+        
+        <div class="diagram">
+            <h3>Dual-Pipeline Test Architecture</h3>
+            <svg viewBox="0 0 800 550" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="14">
+                <style>
+                    .box { fill: #eaf4ff; stroke: #0056b3; stroke-width: 1.5; }
+                    .process-box { fill: #e6f9f0; stroke: #28a745; stroke-width: 1.5; }
+                    .arrow { stroke: #333; stroke-width: 1.5; fill: none; }
+                    .arrow-head { fill: #333; }
+                    .text-label { fill: #212529; text-anchor: middle; }
+                    .sub-text { font-size: 12px; fill: #555; }
+                    .dashed-arrow { stroke-dasharray: 5, 5; }
+                </style>
+                <defs>
+                    <marker id="arrowhead-diag2" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" class="arrow-head" />
+                    </marker>
+                </defs>
+
+                <!-- Input -->
+                <rect x="300" y="20" width="200" height="60" rx="10" class="box"/>
+                <text x="400" y="55" class="text-label">CAN Log File / Bus</text>
+
+                <!-- Dispatcher -->
+                <rect x="300" y="120" width="200" height="60" rx="10" class="process-box"/>
+                <text x="400" y="155" class="text-label">Dispatcher Thread</text>
+                <path d="M 400 80 V 120" class="arrow" marker-end="url(#arrowhead-diag2)"/>
+
+                <!-- High Freq Path -->
+                <rect x="50" y="220" width="200" height="60" rx="10" class="box"/>
+                <text x="150" y="255" class="text-label">High-Freq Queue</text>
+                <path d="M 350 180 C 350 200, 150 200, 150 220" class="arrow" marker-end="url(#arrowhead-diag2)"/>
+                <text x="250" y="195" class="sub-text">10ms IDs</text>
+
+                <rect x="50" y="320" width="200" height="60" rx="10" class="process-box"/>
+                <text x="150" y="355" class="text-label">High-Freq Worker Pool</text>
+                <path d="M 150 280 V 320" class="arrow" marker-end="url(#arrowhead-diag2)"/>
+
+                <!-- Low Freq Path -->
+                <rect x="550" y="220" width="200" height="60" rx="10" class="box"/>
+                <text x="650" y="255" class="text-label">Low-Freq Queue</text>
+                <path d="M 450 180 C 450 200, 650 200, 650 220" class="arrow" marker-end="url(#arrowhead-diag2)"/>
+                <text x="550" y="195" class="sub-text">100ms IDs</text>
+
+                <rect x="550" y="320" width="200" height="60" rx="10" class="process-box"/>
+                <text x="650" y="355" class="text-label">Low-Freq Worker Pool</text>
+                <path d="M 650 280 V 320" class="arrow" marker-end="url(#arrowhead-diag2)"/>
+
+                <!-- Shared Log Queue -->
+                <rect x="300" y="420" width="200" height="60" rx="10" class="box"/>
+                <text x="400" y="455" class="text-label">Shared Log Queue</text>
+                <path d="M 150 380 V 400 C 150 410, 300 430, 300 430" class="arrow dashed-arrow" marker-end="url(#arrowhead-diag2)"/>
+                <path d="M 650 380 V 400 C 650 410, 500 430, 500 430" class="arrow dashed-arrow" marker-end="url(#arrowhead-diag2)"/>
+                
+                <!-- Final Output -->
+                <rect x="300" y="500" width="200" height="40" rx="10" class="box" style="fill: #d4edda; stroke: #155724;"/>
+                <text x="400" y="525" class="text-label">can_log.json</text>
+                 <path d="M 400 480 V 500" class="arrow" marker-end="url(#arrowhead-diag2)"/>
+            </svg>
+        </div>
+        
         <ul>
-            <li><strong>Purpose:</strong> To provide a robust, end-to-end validation of the live data pipeline, ensuring CAN signals are correctly transferred between processes and integrated by the radar tracker.</li>
-            <li><strong>Key Tests:</strong>
-                <ul>
-                    <li><code>test_data_integrity_in_live_pipeline</code>: This test verifies that CAN data is passed without corruption. It starts a mock CAN logger that provides constant, known values (e.g., speed, torque) and a mock radar tracker that processes this data. The test passes if the CAN-derived values in the final <code>track_history.json</code> (specifically in the <code>radarFrames</code> list) match the original known values.</li>
-                    <li><code>test_startup_race_condition_fix</code>: This test specifically validates the fix for the initial data corruption bug. It uses a special "delayed start" mock CAN logger that waits for a few hundred milliseconds before sending any data. The test confirms that the radar tracker process waits patiently for this delayed data stream instead of starting with uninitialized "garbage" values. It passes by asserting that the CAN data in the very first frame of the output JSON is valid and correct.</li>
-                </ul>
-            </li>
-            <li><strong>Success:</strong> Both tests are currently passing. This confirms that the data integrity is maintained throughout the pipeline and that the startup race condition has been successfully resolved.</li>
-        </ul>
-
-        <h2>Worker Task Breakdown</h2>
-        <p>The <code>test_dual_pipeline_simulation.py</code> script creates two specialized worker processes. Here is a breakdown of their individual tasks.</p>
-
-        <h3>Worker 1: High-Frequency Pipeline</h3>
-        <ul>
-            <li><strong>Input Queue:</strong> <code>high_freq_raw_queue</code></li>
-            <li><strong>Messages:</strong> Receives messages with IDs corresponding to a <strong>10ms</strong> cycle time (e.g., 0x09A, 0x0AD).</li>
-            <li><strong>Monitored Signals:</strong> Checks decoded signals against the <code>high_freq_monitored_signals</code> set.</li>
-            <li><strong>Tasks:</strong>
+            <li><strong>Purpose:</strong> To perform a hardware-free integration test of the main application's <em>actual</em> dual-pipeline architecture.</li>
+            <li><strong>Method:</strong>
                 <ol>
-                    <li>Pulls a raw CAN message from its dedicated queue.</li>
-                    <li>Uses the <code>cantools</code> library and the <code>VCU.dbc</code> file to decode the message's binary data into physical signal values (e.g., km/h, Nm).</li>
-                    <li>Compares the names of the decoded signals against its list of high-frequency signals to monitor.</li>
-                    <li>If a decoded signal is on its list, it packages the signal's name, value, and timestamp into a dictionary.</li>
-                    <li>Puts the final dictionary into the shared <code>log_queue</code> for the main test process to collect and verify.</li>
+                    <li>The test imported the <code>CANReader</code>, <code>processing_worker</code>, and <code>utils</code> directly from the <code>src/can_logger_app</code> module.</li>
+                    <li>It mocked the <code>can.interface.Bus</code> to play back messages from the <code>2w_sample.log</code> file.</li>
+                    <li>It instantiated the full dual-pipeline system: a <code>CANReader</code> dispatcher thread, a high-frequency queue and worker pool, and a low-frequency queue and worker pool.</li>
+                    <li>Each worker pool was given its correctly segregated list of signals to monitor, exactly as in the main application.</li>
                 </ol>
             </li>
-            <li><strong>Log File:</strong> <code>tests/test_data/worker_1_high_freq.log</code></li>
+            <li><strong>Result:</strong> The test <strong>passed</strong>. It successfully logged both a known high-frequency signal (<code>ETS_MOT_ShaftTorque_Est_Nm</code>) and a known low-frequency signal (<code>ETS_VCU_VehSpeed_Act_kmph</code>).</li>
+            <li><strong>Conclusion:</strong> This test definitively proved that the root cause of the missing 100ms signals was the absent <code>master_sigList.txt</code> file. With the input file present, the main application's core logic for segregating and processing high and low-frequency signals works as designed. The temporary test was subsequently removed.</li>
         </ul>
+    </section>
 
-        <h3>Worker 2: Low-Frequency Pipeline</h3>
+    <section class="card">
+        <h2>Debugging Notes</h2>
+        <h3>Missing Signals in Test Data</h3>
+        <p>During debugging, it was discovered that the test <code>test_low_frequency_signals_are_processed</code> reports a warning that the signal <code>ETS_VCU_BrakePedal_Act_perc</code> is not found. This is expected behavior with the current test data.</p>
         <ul>
-            <li><strong>Input Queue:</strong> <code>low_freq_raw_queue</code></li>
-            <li><strong>Messages:</strong> Receives messages with IDs corresponding to a <strong>100ms</strong> cycle time (e.g., 0x30E, 0x30F, 0x310).</li>
-            <li><strong>Monitored Signals:</strong> Checks decoded signals against the <code>low_freq_monitored_signals</code> set.</li>
-            <li><strong>Tasks:</strong>
-                <ol>
-                    <li>Pulls a raw CAN message from its dedicated queue.</li>
-                    <li>Performs the same decoding process as the high-frequency worker using the <code>VCU.dbc</code> file.</li>
-                    <li>Compares the decoded signals against its unique list of low-frequency signals.</li>
-                    <li>If a match is found, it packages the data into a dictionary.</li>
-                    <li>Puts the dictionary into the same shared <code>log_queue</code> for final verification.</li>
-                </ol>
-            </li>
-            <li><strong>Log File:</strong> <code>tests/test_data/worker_2_low_freq.log</code></li>
+            <li><strong>Reason:</strong> The configuration file <code>master_sigList.txt</code> lists <code>ETS_VCU_BrakePedal_Act_perc</code> as a signal to be monitored. However, the test log file <code>2w_sample.log</code> does not contain any CAN messages that include this specific signal.</li>
+            <li><strong>Conclusion:</strong> The test is functioning correctly. It is accurately reporting that a configured signal is not present in the provided data. This is a data-configuration mismatch, not a bug in the processing code.</li>
         </ul>
-    </div>
+    </section>
+
+</div>
 </body>
 </html>

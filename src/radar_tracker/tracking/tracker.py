@@ -70,6 +70,16 @@ class RadarTracker:
         can_grade = current_frame.EstimatedGrade_Est_Deg
         # --- END OF STEP 4 FIX ---
 
+        # --- NEW FEATURE: Conditionally ignore IMU/Grade data ---
+        if current_frame.imu_stuck:
+            # Check for a new debug flag, but proceed even if not defined
+            if config.DEBUG_FLAGS.get('log_imu_stuck', False):
+                logger.debug(f"[TRACKER] IMU Stuck flag is TRUE. Ignoring grade ({can_grade} deg) for ego-motion estimation.")
+            can_grade = np.nan
+            current_frame.EstimatedGrade_Est_Deg = np.nan # Persist the change for logging
+            # In the future, other IMU signals (ax, ay, omega) would also be zeroed out or handled here.
+        # --- END OF NEW FEATURE ---
+
         imu_ax, imu_ay, imu_omega = 0.0, 0.0, 0.0
         
         cartesian_pos_data = current_frame.posLocal

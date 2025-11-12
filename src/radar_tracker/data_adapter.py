@@ -33,6 +33,7 @@ class FHistFrame:
         self.ETS_MOT_ShaftTorque_Est_Nm = np.nan
         self.ETS_VCU_Gear_Engaged_St_enum = np.nan
         self.EstimatedGrade_Est_Deg = np.nan
+        self.imu_stuck = False
 
 def adapt_frame_data_to_fhist(frame_data, current_timestamp_ms, can_signals=None):
     """
@@ -76,9 +77,14 @@ def adapt_frame_data_to_fhist(frame_data, current_timestamp_ms, can_signals=None
         fhist_frame.ETS_VCU_Gear_Engaged_St_enum = can_signals.get('ETS_VCU_Gear_Engaged_St_enum', np.nan)
         fhist_frame.EstimatedGrade_Est_Deg = can_signals.get('EstimatedGrade_Est_Deg', np.nan)
         
+        # NEW: Check for the IMU stuck flag
+        imu_stuck_value = can_signals.get('ETS_VCU_imuProc_imuStuck_B', 0)
+        fhist_frame.imu_stuck = bool(imu_stuck_value)
+        
         if config.DEBUG_FLAGS.get('log_can_data_adapter'):
             logger.debug(f"[ADAPTER] Populated fhist_frame.egoVx with {speed_mps:.2f} m/s")
             logger.debug(f"[ADAPTER] Stored raw CAN signals: Speed={fhist_frame.ETS_VCU_VehSpeed_Act_kmph}, Torque={fhist_frame.ETS_MOT_ShaftTorque_Est_Nm}, Gear={fhist_frame.ETS_VCU_Gear_Engaged_St_enum}, Grade={fhist_frame.EstimatedGrade_Est_Deg}")
+            logger.debug(f"[ADAPTER] IMU Stuck Flag: {fhist_frame.imu_stuck}")
 
         # NOTE: Add other signals like yaw rate ('CAN_YAW_RATE') if the tracker uses them.
         # For now, we are only using vehicle speed.

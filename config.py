@@ -57,6 +57,9 @@ DEBUG_FLAGS = {
     # Logs the egoVx value from the final history before it's saved to JSON
     # in src/radar_tracker/tracking/update_and_save_history.py
     'log_final_history': True,
+    
+    
+    'log_imu_stuck': True,
 }
 
 # --- Component-Specific Debug Flags ---
