@@ -17,7 +17,7 @@ def _convert_track_to_dict(track, params):
     state_vec = track.immState.X[c_model]
     
     # Use polar coordinates for the primary state
-    r, az, vr = cartesian_to_polar(state_vec[0], state_vec[1], state_vec[2], state_vec[3])
+    r, az, vr, _ = cartesian_to_polar(state_vec[0], state_vec[1], state_vec[2], state_vec[3])
 
     return {
         "id": track.id,
@@ -42,29 +42,32 @@ def _convert_track_to_dict(track, params):
         "ttcCategory": track.ttcCategory
     }
 
+# --- THIS IS THE FIXED FUNCTION ---
 def _convert_cluster_to_dict(cluster):
-    """Converts a single cluster object to a JSON-serializable dictionary."""
+    """Converts a single cluster dictionary to a JSON-serializable dictionary."""
     if cluster is None:
         return None
 
-    x_mean = getattr(cluster, 'x_mean', np.nan)
-    y_mean = getattr(cluster, 'y_mean', np.nan)
-    vx_mean = getattr(cluster, 'vx_mean', np.nan)
-    vy_mean = getattr(cluster, 'vy_mean', np.nan)
+    # Access data using dictionary .get() method
+    x_mean = cluster.get('x_mean', np.nan)
+    y_mean = cluster.get('y_mean', np.nan)
+    vx_mean = cluster.get('vx_mean', np.nan)
+    vy_mean = cluster.get('vy_mean', np.nan)
     
-    r, az, vr = cartesian_to_polar(x_mean, y_mean, vx_mean, vy_mean)
+    r, az, vr, _ = cartesian_to_polar(x_mean, y_mean, vx_mean, vy_mean)
 
     return {
-        "id": cluster.id,
+        "id": cluster.get('id', None), # Use .get()
         "radialSpeed": float(vr),
         "vx": float(vx_mean),
         "vy": float(vy_mean),
         "azimuth": float(np.rad2deg(az)),
-        "isOutlier": cluster.isOutlier,
-        "isStationaryInBox": cluster.isStationaryInBox,
+        "isOutlier": cluster.get('isOutlier', False), # Use .get()
+        "isStationaryInBox": cluster.get('isStationaryInBox', False), # Use .get()
         "x": float(x_mean),
         "y": float(y_mean)
     }
+# --- END OF FIX ---
 
 def _convert_point_to_dict(point):
     """Converts a single point (as a dictionary) to a JSON-serializable dictionary."""
@@ -111,8 +114,6 @@ def create_visualization_data(all_tracks, fhist, params=None):
         if not np.isfinite(ego_vx): ego_vx = None
         if not np.isfinite(ego_vy): ego_vy = None
 
-        # --- THIS IS THE FULLY CORRECTED SECTION ---
-        
         # 1. Safely get the can_signals dictionary from the frame object
         can_signals = getattr(frame, 'can_signals', {})
 
@@ -127,7 +128,6 @@ def create_visualization_data(all_tracks, fhist, params=None):
             
             # --- ADDED PER YOUR REQUEST ---
             "ETS_VCU_AccelPedal_Act_perc": can_signals.get('ETS_VCU_AccelPedal_Act_perc', None),
-            # --- END OF ADDITION ---
             
             "correctedEgoSpeed_mps": getattr(frame, 'correctedEgoSpeed_mps', None),
             "shaftTorque_Nm": getattr(frame, 'shaftTorque_Nm', None),
@@ -146,13 +146,11 @@ def create_visualization_data(all_tracks, fhist, params=None):
         for signal_name, value in can_signals.items():
             if signal_name not in frame_output:
                 frame_output[signal_name] = value
-        # --- END OF MODIFIED SECTION ---
 
         # Add clusters
         point_cloud_data = getattr(frame, 'pointCloud', None)
         cluster_info = getattr(frame, 'detectedClusterInfo', None)
 
-        # --- THIS IS THE FIX ---
         # Check .size > 0 for numpy arrays, or len() > 0 for lists
         is_cluster_info_non_empty = False
         if cluster_info is not None:
@@ -162,14 +160,12 @@ def create_visualization_data(all_tracks, fhist, params=None):
                 is_cluster_info_non_empty = len(cluster_info) > 0
 
         if is_cluster_info_non_empty:
-        # --- END OF FIX ---
             for cluster in cluster_info:
                 cluster_dict = _convert_cluster_to_dict(cluster)
                 if cluster_dict:
                     frame_output["clusters"].append(cluster_dict)
 
         # Add point cloud
-        # --- THIS IS THE FIX ---
         # Check if point_cloud_data is a dict, has 'x', and 'x' is not empty
         is_point_cloud_non_empty = False
         if point_cloud_data is not None and isinstance(point_cloud_data, dict) and 'x' in point_cloud_data:
@@ -181,7 +177,6 @@ def create_visualization_data(all_tracks, fhist, params=None):
                     is_point_cloud_non_empty = len(point_x_array) > 0
 
         if is_point_cloud_non_empty:
-        # --- END OF FIX ---
             for i in range(len(point_cloud_data['x'])):
                 point = {
                     'x': point_cloud_data['x'][i],
