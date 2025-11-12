@@ -26,3 +26,21 @@ A new, robust test case, `test_imu_stuck_flag_ignores_grade`, was added to `test
     3.  Asserts that the index is within a reasonable window of when the flag was expected to flip, accounting for timing skew.
     4.  Asserts that the frame immediately *before* the change has a valid, non-null grade.
 *   **Result:** With the corrected application logic and the robust test case, the test suite passes, confirming the feature works as designed.
+
+Part 34: Bugfix - Race Condition and Serialization
+During a proactive code audit of the live data pipeline, two critical, latent bugs were identified that could lead to data corruption.
+
+The Problem
+1.  **Data Loss (Race Condition):** The `data_processor.py` module allowed multiple worker processes to update the `live_data_dict` concurrently. The "read-modify-write" pattern used to append new data to the signal buffers was not atomic. This created a race condition where one process would frequently overwrite the update from another, leading to silent and random loss of CAN signal data before it ever reached the radar tracker.
+2.  **Data Corruption (String Serialization):** To work around an earlier issue with `numpy` data types, a fix was implemented to convert all `float` values to `str` before placing them in the shared dictionary. The receiving process (`main_live.py`) would then parse these strings back to floats. This introduced a significant risk: on a system with a different locale (e.g., German), `str(123.45)` can become `"123,45"`, which causes the `float()` parsing to fail with a `ValueError`.
+
+The Solution
+A two-part fix was implemented to resolve both issues.
+
+1.  **Fix 1 (Locking):** To solve the race condition, a `multiprocessing.Lock` was created in `src/can_logger_app/main.py` and shared with all `processing_worker` instances. In `src/can_logger_app/data_processor.py`, the entire block that updates the `live_data_dict` was wrapped in a `with lock:` statement. This ensures that only one process can modify the dictionary at a time, guaranteeing atomic updates and preventing data loss.
+
+2.  **Fix 2 (Native Floats):** The risky string conversion was removed entirely.
+    - In `src/can_logger_app/data_processor.py`, the code was changed to store native Python `float` types directly in the shared buffer.
+    - In `src/radar_tracker/main_live.py`, the corresponding string-parsing logic was removed. The code now directly unpacks the `(float, float)` tuples from the buffer.
+
+This combined solution makes the live data pipeline significantly more robust, efficient, and reliable by eliminating data loss and removing the risk of locale-dependent parsing failures.

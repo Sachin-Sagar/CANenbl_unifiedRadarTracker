@@ -3,243 +3,349 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Technical Documentation</title>
+    <title>CANenbl_unifiedRadarTracker | Technical Overview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-color: #1a1b26;
+            --card-bg: #24283b;
+            --header-bg: #7aa2f7;
+            --header-fg: #1a1b26;
+            --accent-blue: #7aa2f7;
+            --accent-green: #9ece6a;
+            --accent-orange: #ff9e64;
+            --accent-red: #f7768e;
+            --border-color: #414868;
+            --text-primary: #c0caf5;
+            --text-secondary: #a9b1d6;
+            --text-heading: #ffffff;
+        }
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            line-height: 1.6;
-            color: #e0e0e0;
-            background-color: #1e1e1e;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.7;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
             margin: 0;
             padding: 0;
         }
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 40px 20px;
         }
-        h1, h2, h3 {
-            color: #4fc3f7;
-            border-bottom: 2px solid #4fc3f7;
-            padding-bottom: 10px;
-            font-weight: 400;
-        }
-        h1 {
+        header {
             text-align: center;
-            font-size: 2.5em;
+            margin-bottom: 4rem;
+        }
+        header h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            color: var(--text-heading);
+            margin: 0;
+            letter-spacing: -1px;
+        }
+        header p {
+            font-size: 1.25rem;
+            color: var(--accent-blue);
+            margin-top: 0.5rem;
         }
         h2 {
-            font-size: 2em;
-            margin-top: 40px;
+            font-size: 2.25rem;
+            font-weight: 600;
+            color: var(--accent-green);
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-top: 3rem;
+            margin-bottom: 2rem;
         }
         h3 {
-            font-size: 1.5em;
-            border-bottom: 1px solid #0288d1;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--accent-orange);
+            margin-top: 2rem;
+            margin-bottom: 1rem;
         }
         p, li {
-            font-size: 1.1em;
-            color: #cccccc;
+            font-size: 1rem;
+            color: var(--text-secondary);
+        }
+        ul, ol {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 0.5rem;
         }
         code {
-            background-color: #2d2d2d;
-            padding: 2px 5px;
-            border-radius: 4px;
-            font-family: "Fira Code", "Courier New", monospace;
-            color: #ffcc80;
+            background-color: var(--bg-color);
+            color: var(--accent-red);
+            padding: 0.2em 0.4em;
+            border-radius: 5px;
+            font-family: "Fira Code", monospace;
+            font-size: 0.9em;
         }
         .card {
-            background-color: #2a2a2a;
-            border: 1px solid #383838;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
         }
         .diagram-container {
             text-align: center;
-            margin: 30px 0;
-            padding: 20px;
-            background-color: #252525;
+            margin: 2rem 0;
+            padding: 2rem;
+            background-color: #1e2233;
             border-radius: 8px;
+            border: 1px solid var(--border-color);
         }
         svg {
             width: 100%;
             max-width: 900px;
             height: auto;
         }
-        .improvement-grid {
+        .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
+            gap: 1.5rem;
         }
-        .improvement-card {
-            background-color: #2c2c2c;
-            border: 1px solid #444;
+        .feature-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
             border-radius: 8px;
-            padding: 20px;
+            padding: 1.5rem;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            text-align: center;
+            align-items: flex-start;
+            transition: background-color 0.2s ease;
         }
-        .improvement-card svg {
-            width: 60px;
-            height: 60px;
-            margin-bottom: 15px;
+        .feature-card:hover {
+            background-color: #2d324b;
+        }
+        .feature-card .icon {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 1rem;
+            color: var(--accent-blue);
+        }
+        .feature-card h4 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0 0 0.5rem 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.5rem;
+        }
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 12px 15px;
+            text-align: left;
+        }
+        th {
+            background-color: #2a2f4d;
+            color: var(--accent-blue);
+            font-weight: 600;
+        }
+        strong {
+            color: var(--text-primary);
+            font-weight: 500;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Project Technical Documentation</h1>
+        <header>
+            <h1>CANenbl_unifiedRadarTracker</h1>
+            <p>Technical Overview & System Architecture</p>
+        </header>
 
         <div class="card">
-            <h2>1. Current System Architecture</h2>
+            <h2>Key Features</h2>
+            <div class="grid">
+                <div class="feature-card">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                    <h4>Multi-Process Architecture</h4>
+                    <p>Isolates hardware interactions (CAN, Radar) into separate processes for stability and performance, bypassing Python's GIL for true parallelism.</p>
+                </div>
+                <div class="feature-card">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><line x1="12" y1="18" x2="12" y2="12"></line><line x1="12" y1="12" x2="9" y2="9"></line><line x1="12" y1="12" x2="15" y2="9"></line></svg>
+                    <h4>Dual-Pipeline CAN Processing</h4>
+                    <p>High-frequency (10ms) and low-frequency (100ms) signals are processed in parallel pipelines, ensuring critical data is never delayed.</p>
+                </div>
+                <div class="feature-card">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    <h4>Live & Playback Modes</h4>
+                    <p>Run the full tracking algorithm with live sensor data or use pre-recorded log files for deterministic testing, validation, and debugging.</p>
+                </div>
+                <div class="feature-card">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    <h4>Robust Synchronization</h4>
+                    <p>Uses <code>multiprocessing.Event</code> to ensure the radar tracker only begins processing after the CAN logger is initialized and providing valid data, preventing startup race conditions.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>System Architecture</h2>
             <p>The application is designed as a high-performance, multi-process system to fuse radar data with CAN bus signals in real time. The architecture prioritizes stability and performance by isolating hardware interactions and processing data in parallel pipelines.</p>
             
             <div class="diagram-container">
                 <h3>Dual Pipeline Architecture Diagram</h3>
                 <svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg">
-                    <defs><marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4fc3f7" /></marker></defs>
-                    <rect x="10" y="10" width="780" height="480" fill="none" stroke="#555" stroke-width="2" rx="10"/>
-                    <text x="400" y="35" font-family="sans-serif" font-size="16" fill="#ccc" text-anchor="middle">CAN Logger Process</text>
+                    <style>
+                        .bg-rect { fill: var(--card-bg); }
+                        .process-rect { fill: #2a2f4d; }
+                        .thread-rect { fill: #3c3c3c; }
+                        .queue-ellipse { fill: var(--accent-orange); }
+                        .queue-text { fill: var(--bg-color); font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500; text-anchor: middle; }
+                        .main-text { fill: var(--text-primary); font-family: 'Inter', sans-serif; font-size: 14px; text-anchor: middle; }
+                        .sub-text { fill: var(--text-secondary); font-family: 'Inter', sans-serif; font-size: 10px; text-anchor: middle; }
+                        .path-high { stroke: var(--accent-orange); stroke-width: 2; fill: none; }
+                        .path-low { stroke: var(--accent-blue); stroke-width: 2; fill: none; }
+                        .path-log { stroke: var(--accent-green); stroke-width: 2; fill: none; }
+                        .marker-high { fill: var(--accent-orange); }
+                        .marker-low { fill: var(--accent-blue); }
+                        .marker-log { fill: var(--accent-green); }
+                    </defs>
+                    <defs>
+                        <marker id="arrow-high" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="marker-high"/></marker>
+                        <marker id="arrow-low" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="marker-low"/></marker>
+                        <marker id="arrow-log" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="marker-log"/></marker>
+                    </defs>
+                    
+                    <rect x="10" y="10" width="780" height="480" class="bg-rect" stroke="#414868" rx="10"/>
+                    <text x="400" y="35" class="main-text" font-size="16" font-weight="600">CAN Logger Process</text>
 
-                    <rect x="30" y="215" width="120" height="50" fill="#333" rx="5"/><text x="90" y="245" font-family="sans-serif" font-size="14" fill="#ccc" text-anchor="middle">CAN Hardware</text>
-                    <rect x="210" y="215" width="120" height="50" fill="#3c3c3c" rx="5"/><text x="270" y="237" font-family="sans-serif" font-size="14" fill="#ccc" text-anchor="middle">CANReader</text><text x="270" y="255" font-family="sans-serif" font-size="10" fill="#aaa" text-anchor="middle">(Single Thread)</text>
-                    <line x1="150" y1="240" x2="210" y2="240" stroke="#4fc3f7" stroke-width="2" marker-end="url(#arrow)"/>
+                    <rect x="30" y="215" width="120" height="50" class="process-rect" rx="5"/><text x="90" y="245" class="main-text">CAN Hardware</text>
+                    <rect x="210" y="215" width="120" height="50" class="thread-rect" rx="5"/><text x="270" y="237" class="main-text">CANReader</text><text x="270" y="255" class="sub-text">(Single Thread)</text>
+                    <path d="M 150 240 H 210" class="path-log" marker-end="url(#arrow-log)"/>
 
                     <!-- High Freq Pipeline -->
-                    <text x="550" y="70" font-family="sans-serif" font-size="16" fill="#ff8a65" text-anchor="middle">High-Priority Pipeline (10ms)</text>
-                    <ellipse cx="390" cy="120" rx="70" ry="18" fill="#ffccbc"/><text x="390" y="125" font-family="sans-serif" font-size="12" fill="#111" text-anchor="middle">high_freq_queue</text>
-                    <path d="M 270 215 Q 270 130 320 125" stroke="#ff8a65" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
-                    <rect x="500" y="100" width="150" height="50" fill="#3c3c3c" rx="5"/><text x="575" y="122" font-family="sans-serif" font-size="14" fill="#ccc" text-anchor="middle">Worker Pool A</text><text x="575" y="140" font-family="sans-serif" font-size="10" fill="#aaa" text-anchor="middle">(N Processes)</text>
-                    <line x1="460" y1="120" x2="500" y2="120" stroke="#ff8a65" stroke-width="2" marker-end="url(#arrow)"/>
+                    <text x="550" y="70" class="main-text" fill="#ff9e64">High-Priority Pipeline (10ms)</text>
+                    <ellipse cx="390" cy="120" rx="70" ry="18" class="queue-ellipse"/><text x="390" y="125" class="queue-text">high_freq_queue</text>
+                    <path d="M 270 215 Q 270 130 320 125" class="path-high" marker-end="url(#arrow-high)"/>
+                    <rect x="500" y="100" width="150" height="50" class="process-rect" rx="5"/><text x="575" y="122" class="main-text">Worker Pool A</text><text x="575" y="140" class="sub-text">(N Processes)</text>
+                    <path d="M 460 120 H 500" class="path-high" marker-end="url(#arrow-high)"/>
 
                     <!-- Low Freq Pipeline -->
-                    <text x="550" y="310" font-family="sans-serif" font-size="16" fill="#90caf9" text-anchor="middle">Low-Priority Pipeline (100ms)</text>
-                    <ellipse cx="390" cy="360" rx="70" ry="18" fill="#e3f2fd"/><text x="390" y="365" font-family="sans-serif" font-size="12" fill="#111" text-anchor="middle">low_freq_queue</text>
-                    <path d="M 270 265 Q 270 350 320 355" stroke="#90caf9" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
-                    <rect x="500" y="340" width="150" height="50" fill="#3c3c3c" rx="5"/><text x="575" y="362" font-family="sans-serif" font-size="14" fill="#ccc" text-anchor="middle">Worker Pool B</text><text x="575" y="380" font-family="sans-serif" font-size="10" fill="#aaa" text-anchor="middle">(M Processes)</text>
-                    <line x1="460" y1="360" x2="500" y2="360" stroke="#90caf9" stroke-width="2" marker-end="url(#arrow)"/>
+                    <text x="550" y="310" class="main-text" fill="#7aa2f7">Low-Priority Pipeline (100ms)</text>
+                    <ellipse cx="390" cy="360" rx="70" ry="18" fill="#7aa2f7"/><text x="390" y="365" class="queue-text">low_freq_queue</text>
+                    <path d="M 270 265 Q 270 350 320 355" class="path-low" marker-end="url(#arrow-low)"/>
+                    <rect x="500" y="340" width="150" height="50" class="process-rect" rx="5"/><text x="575" y="362" class="main-text">Worker Pool B</text><text x="575" y="380" class="sub-text">(M Processes)</text>
+                    <path d="M 460 360 H 500" class="path-low" marker-end="url(#arrow-low)"/>
 
                     <!-- Final Outputs -->
-                    <ellipse cx="700" cy="240" rx="50" ry="15" fill="#81d4fa"/><text x="700" y="245" font-family="sans-serif" font-size="12" fill="#111" text-anchor="middle">log_queue</text>
-                    <path d="M 650 120 Q 680 180 680 225" stroke="#ff8a65" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
-                    <path d="M 650 360 Q 680 300 680 255" stroke="#90caf9" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
-                    <text x="700" y="450" font-family="sans-serif" font-size="14" fill="#ccc" text-anchor="middle">LogWriter -> can_log.json</text>
-                    <line x1="700" y1="255" x2="700" y2="420" stroke="#4fc3f7" stroke-width="2" marker-end="url(#arrow)"/>
+                    <ellipse cx="700" cy="240" rx="50" ry="15" fill="#9ece6a"/><text x="700" y="245" class="queue-text">log_queue</text>
+                    <path d="M 650 120 Q 680 180 680 225" class="path-high" marker-end="url(#arrow-high)"/>
+                    <path d="M 650 360 Q 680 300 680 255" class="path-low" marker-end="url(#arrow-low)"/>
+                    <text x="700" y="450" class="main-text">LogWriter ➞ can_log.json</text>
+                    <path d="M 700 255 V 420" class="path-log" marker-end="url(#arrow-log)"/>
                     
-                    <text x="575" y="180" font-family="sans-serif" font-size="12" fill="#ccc" text-anchor="middle">-> Shared Dictionary</text>
-                    <text x="575" y="420" font-family="sans-serif" font-size="12" fill="#ccc" text-anchor="middle">-> Shared Dictionary</text>
+                    <text x="575" y="180" class="sub-text">➞ Shared Dictionary (Live Data)</text>
+                    <text x="575" y="420" class="sub-text">➞ Shared Dictionary (Live Data)</text>
                 </svg>
             </div>
-            <p>This "Dual Pipeline" architecture is the core of the CAN logger. It addresses the need to process high-frequency (10ms) and low-frequency (100ms) signals without interference.</p>
-            <ul>
-                <li><strong>CANReader Thread:</strong> A single, fast thread is dedicated to reading all messages from the CAN bus. It acts as a dispatcher, performing a quick check on the message ID to sort it into one of two queues.</li>
-                <li><strong>High-Priority Pipeline:</strong> A dedicated <code>multiprocessing.Queue</code> and a pool of worker processes handle only the high-frequency signals.</li>
-                <li><strong>Low-Priority Pipeline:</strong> A second, parallel queue and worker pool handle the low-frequency signals.</li>
-                <li><strong>Benefits:</strong> This design ensures that a sudden burst of low-priority messages (e.g., status updates) can never delay the processing of critical, high-frequency data (e.g., torque, speed). It leverages multiple CPU cores for true parallel decoding, bypassing Python's Global Interpreter Lock (GIL).</li>
-            </ul>
         </div>
 
         <div class="card">
-            <h2>2. Key Bug Fixes and Solutions</h2>
-            
+            <h2>Resource Management</h2>
+            <div class="grid">
+                <div style="grid-column: 1 / -1;">
+                    <h3>Resource Utilization: Processes and Threads</h3>
+                    <p>The application's multi-process architecture is designed to effectively utilize modern multi-core CPUs. On a typical Windows machine with 4 cores and 8 threads, the application distributes its workload as follows:</p>
+                </div>
+                <div class="feature-card">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                    <h4>Total Processes: 6</h4>
+                    <ul>
+                        <li><strong>1 Main Process:</strong> Hosts the GUI and the primary radar tracking logic.</li>
+                        <li><strong>1 CAN Logger Process:</strong> Manages all CAN hardware communication.</li>
+                        <li><strong>3 High-Freq. Decoder Processes:</strong> A worker pool for decoding time-sensitive (10ms) CAN messages.</li>
+                        <li><strong>1 Low-Freq. Decoder Process:</strong> A worker for less critical (100ms) CAN messages.</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
+                    <h4>Dedicated Threads: 3</h4>
+                     <ul>
+                        <li><strong>1 RadarWorker (QThread):</strong> Runs the core tracking algorithm inside the Main Process.</li>
+                        <li><strong>1 CANReader (Thread):</strong> Dedicated to reading raw data from the CAN hardware.</li>
+                        <li><strong>1 LogWriter (Thread):</strong> Dedicated to writing decoded data to disk.</li>
+                    </ul>
+                </div>
+                <div style="grid-column: 1 / -1;">
+                    <h3>Process vs. Thread: Key Differences</h3>
+                    <p>Understanding the distinction between processes and threads is fundamental to grasping the application's architecture.</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Feature</th>
+                                <th>Process</th>
+                                <th>Thread</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Memory</strong></td>
+                                <td>Isolated memory space.</td>
+                                <td>Shares memory with other threads in the same process.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Communication</strong></td>
+                                <td>Requires explicit Inter-Process Communication (IPC) like Queues or Pipes.</td>
+                                <td>Can communicate directly through shared memory.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Fault Tolerance</strong></td>
+                                <td>A crash in one process does not affect others.</td>
+                                <td>A crash in one thread brings down the entire process.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Parallelism</strong></td>
+                                <td>Achieves true parallelism on multi-core systems.</td>
+                                <td>Used for concurrency within a single process.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Key Bug Fixes and Solutions</h2>
             <h3>Startup Race Condition</h3>
             <ul>
-                <li><strong>Problem:</strong> The radar tracker process would start and request CAN data before the CAN logger process had finished initializing and decoding its first messages. This resulted in the tracker processing uninitialized or "garbage" data for the first ~10 frames.</li>
-                <li><strong>Solution:</strong> A synchronization system using <code>multiprocessing.Event</code> was implemented. The CAN logger's worker processes now only set the "ready" event after they have successfully decoded and shared a predefined set of <strong>critical signals</strong> (e.g., speed, torque, accelerator pedal). The radar tracker process waits for this event before starting its main loop, guaranteeing it has a complete set of valid data from the very first frame.</li>
+                <li><strong>Problem:</strong> The radar tracker would start before the CAN logger was ready, leading to processing of "garbage" data for the first few frames.</li>
+                <li><strong>Solution:</strong> A <code>multiprocessing.Event</code> now synchronizes the two processes. The tracker waits for the "ready" signal, which the CAN logger only sends after it has decoded and shared a complete set of critical signals.</li>
             </ul>
-
             <h3>Cross-Platform Stability (Windows)</h3>
             <ul>
-                <li><strong>Problem:</strong> The application would crash on Windows with <code>QObject</code> timer errors or <code>PermissionError</code> when starting child processes.</li>
-                <li><strong>Solution:</strong> These issues were traced to how `multiprocessing` and thread-sensitive libraries (like Qt, used by the PCAN driver) interact. The architecture was refined to ensure that hardware-related objects (like the <code>can.Bus</code>) are created, used, and destroyed entirely within the same dedicated thread, respecting library constraints. Furthermore, all critical module imports were moved inside the <code>if __name__ == '__main__':</code> block to prevent unsafe resource inheritance by child processes on Windows.</li>
+                <li><strong>Problem:</strong> The app would crash on Windows with <code>QObject</code> timer errors or <code>PermissionError</code>.</li>
+                <li><strong>Solution:</strong> The architecture was refined to ensure hardware-related objects are created and destroyed in the same thread. Critical imports were deferred to prevent unsafe resource inheritance by child processes.</li>
             </ul>
-
             <h3>Data Corruption in Logs and Shared Data</h3>
             <ul>
-                <li><strong>Problem:</strong> Numeric values in the final <code>can_log.json</code> and <code>track_history.json</code> files, as well as in the live shared data, would appear as massive, incorrect numbers.</li>
-                <li><strong>Solution:</strong> The root cause was the use of non-standard numeric types (like <code>numpy.float64</code>) in data structures that were passed between processes or serialized to JSON. The entire data pipeline was audited and fixed to explicitly cast all numeric data to a standard Python <code>float()</code> at every stage: before being placed in the shared dictionary, after interpolation, and before being written to a file. This ensures data integrity across the entire system.</li>
+                <li><strong>Problem:</strong> Numeric values appeared as massive, incorrect numbers in logs and live data.</li>
+                <li><strong>Solution:</strong> The root cause was using non-standard <code>numpy.float64</code> types in IPC. The entire pipeline was audited to explicitly cast all numbers to a standard Python <code>float()</code> at every stage, ensuring data integrity.</li>
             </ul>
-
             <h3>Robustness Feature: "IMU Stuck" Flag</h3>
             <ul>
-                <li><strong>Goal:</strong> To improve the robustness of the vehicle ego-motion estimation by ignoring potentially faulty CAN signals when the vehicle's IMU reports a malfunction.</li>
-                <li><strong>Implementation:</strong>
-                    <ol>
-                        <li>The <code>ETS_VCU_imuProc_imuStuck_B</code> CAN signal is now monitored and propagated to the radar tracker as an <code>imu_stuck</code> flag on each data frame.</li>
-                        <li>Inside the tracker, before the ego-motion algorithm is run, this flag is checked.</li>
-                        <li>If the flag is <code>True</code>, the <code>EstimatedGrade_Est_Deg</code> value for that frame is overwritten with <code>np.nan</code>, effectively nullifying it.</li>
-                        <li>The JSON exporter was updated to read this final, processed grade value, ensuring the final log correctly shows <code>null</code> when the data is ignored.</li>
-                    </ol>
-                </li>
+                <li><strong>Goal:</strong> Improve ego-motion estimation by ignoring faulty IMU signals.</li>
+                <li><strong>Implementation:</strong> The tracker now monitors the <code>ETS_VCU_imuProc_imuStuck_B</code> CAN signal. If true, the road grade value for that frame is nullified before being used by the estimation algorithm, preventing corrupted data from affecting vehicle dynamics calculations.</li>
             </ul>
-            <div class="diagram-container">
-                <h4>"IMU Stuck" Logic Flow</h4>
-                <svg viewBox="0 0 800 350" xmlns="http://www.w3.org/2000/svg">
-                    <defs><marker id="arrow-dark" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4fc3f7" /></marker></defs>
-                    <style>
-                        .flow-box { fill: #3c3c3c; stroke: #555; }
-                        .decision-box { fill: #4a2c2c; stroke: #ff8a65; }
-                        .flow-text { font-family: sans-serif; font-size: 14px; fill: #ccc; text-anchor: middle; }
-                        .flow-path { stroke: #4fc3f7; stroke-width: 2; fill: none; marker-end: url(#arrow-dark); }
-                        .label-text { font-family: sans-serif; font-size: 12px; fill: #aaa; text-anchor: middle; }
-                    </style>
-                    
-                    <!-- Start -->
-                    <rect x="50" y="50" width="200" height="60" rx="5" class="flow-box"/>
-                    <text x="150" y="80" class="flow-text">Frame with `imu_stuck` flag</text>
-
-                    <!-- Decision -->
-                    <path d="M 350 80 L 450 30 L 550 80 L 450 130 Z" class="decision-box"/>
-                    <text x="450" y="85" class="flow-text">Is `imu_stuck` True?</text>
-                    <line x1="250" y1="80" x2="350" y2="80" class="flow-path"/>
-
-                    <!-- Yes Path -->
-                    <rect x="375" y="160" width="150" height="50" rx="5" class="flow-box"/>
-                    <text x="450" y="190" class="flow-text">Set grade = null</text>
-                    <path d="M 450 130 V 160" class="flow-path"/>
-                    <text x="480" y="150" class="label-text">Yes</text>
-
-                    <!-- No Path -->
-                    <path d="M 550 80 H 650" class="flow-path"/>
-                    <text x="600" y="70" class="label-text">No</text>
-
-                    <!-- Merge -->
-                    <path d="M 650 80 V 240" class="flow-path"/>
-                    <path d="M 450 210 V 240" class="flow-path"/>
-                    
-                    <!-- Final Step -->
-                    <rect x="575" y="240" width="150" height="60" rx="5" class="flow-box"/>
-                    <text x="650" y="265" class="flow-text">Call Ego-Motion</text>
-                    <text x="650" y="285" class="flow-text">Estimator</text>
-                </svg>
-            </div>
         </div>
-
-        <div class="card">
-            <h2>3. Future Considerations & Improvements</h2>
-            <p>While the current system is robust, the following methods could be implemented to further improve performance and reliability.</p>
-            <div class="improvement-grid">
-                <div class="improvement-card">
-                    <svg viewBox="0 0 24 24"><path fill="#4fc3f7" d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" /></svg>
-                    <h3>Profile for Bottlenecks</h3>
-                    <p>Use tools like <code>cProfile</code> to get a detailed breakdown of where the application is spending the most time. This provides concrete data to guide optimization efforts.</p>
-                </div>
-                <div class="improvement-card">
-                    <svg viewBox="0 0 24 24"><path fill="#ffb74d" d="M11,15H13V17H11V15M11,7H13V13H11V7M12,2C6.47,2 2,6.47 2,12C2,17.53 6.47,22 12,22C17.53,22 22,17.53 22,12C22,6.47 17.53,2 12,2M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20Z" /></svg>
-                    <h3>Monitor Queue Health</h3>
-                    <p>Add a monitoring thread to periodically check queue sizes. If a queue is consistently full, it's a clear sign of a bottleneck, providing an immediate diagnosis.</p>
-                </div>
-                <div class="improvement-card">
-                    <svg viewBox="0 0 24 24"><path fill="#81c784" d="M12,2A2,2 0 0,0 10,4V8A2,2 0 0,0 12,10A2,2 0 0,0 14,8V4A2,2 0 0,0 12,2M17,12A1,1 0 0,0 16,11H8A1,1 0 0,0 7,12A1,1 0 0,0 8,13H16A1,1 0 0,0 17,12M12,14A2,2 0 0,0 10,16V20A2,2 0 0,0 12,22A2,2 0 0,0 14,20V16A2,2 0 0,0 12,14M4,10A2,2 0 0,0 2,12A2,2 0 0,0 4,14H8A2,2 0 0,0 10,12A2,2 0 0,0 8,10H4M16,14A2,2 0 0,0 14,12A2,2 0 0,0 16,10H20A2,2 0 0,0 22,12A2,2 0 0,0 20,14H16Z" /></svg>
-                    <h3>CPU Core Pinning</h3>
-                    <p>On Linux, assign processes to specific CPU cores. This reduces context-switching and improves cache efficiency, leading to more consistent real-time performance.</p>
-                </div>
-            </div>
-        </div>
-
     </div>
 </body>
 </html>

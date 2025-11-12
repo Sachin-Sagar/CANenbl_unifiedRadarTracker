@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comparison of IPC and Serialization Methods</title>
+    <style>
+        :root {
+            --bg-color: #1a1b26;
+            --fg-color: #c0caf5;
+            --card-bg: #24283b;
+            --header-bg: #7aa2f7;
+            --header-fg: #1a1b26;
+            --accent-blue: #7aa2f7;
+            --accent-green: #9ece6a;
+            --accent-orange: #ff9e64;
+            --accent-red: #f7768e;
+            --border-color: #414868;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            background-color: var(--bg-color);
+            color: var(--fg-color);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background-color: var(--card-bg);
+            border-bottom: 4px solid var(--header-bg);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            text-align: center;
+            border-radius: 8px;
+        }
+        header h1 {
+            margin: 0;
+            color: var(--header-bg);
+            font-size: 2.5rem;
+        }
+        header p {
+            margin: 5px 0 0;
+            font-size: 1.2rem;
+            color: var(--accent-blue);
+        }
+        h2 {
+            color: var(--accent-green);
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-top: 2rem;
+        }
+        h3 {
+            color: var(--accent-orange);
+            margin-top: 1.5rem;
+        }
+        section {
+            background-color: var(--card-bg);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+        code {
+            background-color: var(--bg-color);
+            color: var(--accent-red);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Fira Code", monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.5rem;
+        }
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #2a2f4d;
+            color: var(--accent-blue);
+        }
+        .pros { color: var(--accent-green); }
+        .cons { color: var(--accent-red); }
+        .diagram-container {
+            text-align: center;
+            padding: 20px;
+            margin-top: 1rem;
+            background-color: #1e2233;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            overflow-x: auto;
+        }
+        .infographic-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            align-items: stretch;
+        }
+        .infographic-box {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 1rem;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .infographic-box h4 {
+            margin: 0 0 0.5rem 0;
+            color: var(--accent-blue);
+        }
+        .infographic-data {
+            font-family: "Fira Code", monospace;
+            color: var(--fg-color);
+            background-color: #16161e;
+            padding: 0.5rem;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Alternative Implementation Approaches</h1>
+            <p>Comparison of Serialization and Inter-Process Communication (IPC) Methods</p>
+        </header>
+
+        <section id="summary">
+            <h2>Executive Summary</h2>
+            <p>The current implementation relies on a <code>multiprocessing.Manager.dict</code> for IPC and manual casting of non-standard types (like <code>numpy.float64</code>) to standard Python types for serialization. If this approach were to become a bottleneck, several alternatives exist. This document compares these options based on performance, complexity, and ideal use case.</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Method</th>
+                        <th>Relative Performance</th>
+                        <th>Implementation Complexity</th>
+                        <th>Best For</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr style="background-color: #2a2f4d;">
+                        <td><strong>Current: Manager.dict + Casting</strong></td>
+                        <td><strong>Low-Medium</strong></td>
+                        <td><strong>Low</strong></td>
+                        <td><strong>Rapid prototyping and moderate throughput scenarios.</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Custom JSON Encoder</td>
+                        <td>Low</td>
+                        <td>Low</td>
+                        <td>Handling diverse data types for file logging.</td>
+                    </tr>
+                    <tr>
+                        <td><code>multiprocessing.Queue</code></td>
+                        <td>High</td>
+                        <td>Medium</td>
+                        <td>A general-purpose, high-throughput IPC channel.</td>
+                    </tr>
+                    <tr>
+                        <td><code>multiprocessing.shared_memory</code></td>
+                        <td>Highest</td>
+                        <td>High</td>
+                        <td>Extreme real-time needs with zero data copying.</td>
+                    </tr>
+                    <tr>
+                        <td>MessagePack / Protobuf</td>
+                        <td>Very High</td>
+                        <td>Medium-High</td>
+                        <td>Minimizing data size and serialization overhead.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="current">
+            <h2>Current Implementation: <code>Manager.dict</code> & Manual Casting</h2>
+            <p>The application currently uses a <code>multiprocessing.Manager.dict()</code> for sharing live CAN data between the CAN logger and the radar tracker processes. This object provides a convenient, dictionary-like interface that handles the serialization of standard Python data types automatically.</p>
+            <div class="diagram-container">
+                <h4>Current IPC Flow</h4>
+                <svg viewBox="0 0 800 300" xmlns="http://www.w3.org/2000/svg">
+                     <defs><marker id="arrow-current" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7aa2f7"/></marker></defs>
+                    <style>.box{fill:#2a2a2a;stroke:#414868;}.txt{fill:#c0caf5;font-family:sans-serif;text-anchor:middle;}.sub{font-size:12px;fill:#9a9a9a;}.pth{stroke:#7aa2f7;stroke-width:2;fill:none;marker-end:url(#arrow-current);}.mgr{fill:#1e2233;stroke:#ff9e64;}</style>
+                    <rect x="25" y="100" width="180" height="100" rx="5" class="box"/>
+                    <text x="115" y="140" class="txt">CAN Logger Process</text>
+                    <text x="115" y="160" class="txt sub">Decodes to numpy.float64</text>
+
+                    <rect x="230" y="125" width="120" height="50" rx="5" class="box"/>
+                    <text x="290" y="155" class="txt">Cast to float()</text>
+
+                    <rect x="400" y="100" width="150" height="100" rx="5" class="mgr"/>
+                    <text x="475" y="140" class="txt">Manager Process</text>
+                    <text x="475" y="160" class="txt sub">(Handles Manager.dict)</text>
+
+                    <rect x="600" y="100" width="180" height="100" rx="5" class="box"/>
+                    <text x="690" y="140" class="txt">Radar Tracker</text>
+                    <text x="690" y="160" class="txt sub">Reads from dict</text>
+
+                    <path d="M 205 150 H 230" class="pth"/>
+                    <path d="M 350 150 H 400" class="pth"/>
+                    <path d="M 550 150 H 600" class="pth"/>
+                </svg>
+            </div>
+            <ul>
+                <li><strong class="pros">Pros:</strong> Simple to implement, dictionary-like API is intuitive and flexible.</li>
+                <li><strong class="cons">Cons:</strong> The <code>Manager</code> runs in a separate process, which introduces significant serialization (pickling) and communication overhead. It is known to be much slower than other IPC methods. It also fails to serialize non-standard types (like NumPy's), requiring manual data casting before insertion.</li>
+            </ul>
+        </section>
+
+        <section id="option1">
+            <h2>Option 1: Smarter Serialization</h2>
+            <h3>Custom JSON Encoder</h3>
+            <p>This approach centralizes the logic for handling non-standard data types, making the application code cleaner. Instead of adding <code>float()</code> casts in multiple places, a single encoder class is taught how to handle types like those from NumPy.</p>
+            <ul>
+                <li><strong class="pros">Pros:</strong> Centralizes conversion logic, improves code readability.</li>
+                <li><strong class="cons">Cons:</strong> Only solves the problem for JSON file output (<code>json.dumps</code>). It does not solve serialization issues for IPC mechanisms like <code>Manager.dict</code> which use <code>pickle</code>.</li>
+            </ul>
+        </section>
+
+        <section id="option2">
+            <h2>Option 2: Faster Inter-Process Communication (IPC)</h2>
+            <p>If the <code>Manager.dict</code> becomes a performance bottleneck due to its overhead, switching to a more direct IPC method is the best solution.</p>
+            
+            <h3>A. `multiprocessing.Queue`</h3>
+            <p>A queue provides a simple and robust way to pass messages from a producer (the CAN logger) to a consumer (the radar tracker). It's significantly faster than a managed dictionary.</p>
+            <div class="diagram-container">
+                <h4>`multiprocessing.Queue` Flowchart</h4>
+                <svg viewBox="0 0 800 300" xmlns="http://www.w3.org/2000/svg">
+                    <defs><marker id="arrow-q" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7aa2f7"/></marker></defs>
+                    <style>.box{fill:#2a2a2a;stroke:#414868;}.txt{fill:#c0caf5;font-family:sans-serif;text-anchor:middle;}.sub{font-size:12px;fill:#9a9a9a;}.pth{stroke:#7aa2f7;stroke-width:2;fill:none;marker-end:url(#arrow-q);}</style>
+                    <rect x="50" y="100" width="200" height="100" rx="5" class="box"/>
+                    <text x="150" y="140" class="txt">CAN Logger Process</text>
+                    <text x="150" y="160" class="txt sub">producer</text>
+                    
+                    <rect x="300" y="125" width="200" height="50" rx="25" fill="#1e2233" stroke="#ff9e64"/>
+                    <text x="400" y="155" class="txt">multiprocessing.Queue</text>
+
+                    <rect x="550" y="100" width="200" height="100" rx="5" class="box"/>
+                    <text x="650" y="140" class="txt">Radar Tracker Process</text>
+                    <text x="650" y="160" class="txt sub">consumer</text>
+
+                    <path d="M 250 150 H 300" class="pth"/>
+                    <text x="275" y="140" class="txt sub">queue.put(data)</text>
+                    <path d="M 500 150 H 550" class="pth"/>
+                    <text x="525" y="140" class="txt sub">data = queue.get()</text>
+                </svg>
+            </div>
+
+            <h3>B. `multiprocessing.shared_memory`</h3>
+            <p>For maximum performance, shared memory allows multiple processes to access the same block of RAM directly, eliminating all serialization and data copying overhead.</p>
+            <div class="diagram-container">
+                <h4>`shared_memory` Flowchart</h4>
+                <svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+                    <defs><marker id="arrow-sm" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7aa2f7"/></marker></defs>
+                    <style>.box{fill:#2a2a2a;stroke:#414868;}.txt{fill:#c0caf5;font-family:sans-serif;text-anchor:middle;}.sub{font-size:12px;fill:#9a9a9a;}.pth{stroke:#7aa2f7;stroke-width:2;fill:none;marker-end:url(#arrow-sm);}.sync{fill:#1e2233;stroke:#f7768e;}</style>
+                    <rect x="50" y="50" width="200" height="100" rx="5" class="box"/>
+                    <text x="150" y="90" class="txt">CAN Logger Process</text>
+                    <text x="150" y="110" class="txt sub">Writer</text>
+
+                    <rect x="550" y="50" width="200" height="100" rx="5" class="box"/>
+                    <text x="650" y="90" class="txt">Radar Tracker Process</text>
+                    <text x="650" y="110" class="txt sub">Reader</text>
+
+                    <rect x="200" y="250" width="400" height="80" rx="5" fill="#16161e" stroke="#9ece6a"/>
+                    <text x="400" y="295" class="txt" font-size="18">Shared Memory Block (RAM)</text>
+
+                    <rect x="350" y="150" width="100" height="50" rx="5" class="sync"/>
+                    <text x="400" y="180" class="txt">Lock / Event</text>
+
+                    <path d="M 150 150 V 230 C 150 240 250 250 250 250" class="pth"/>
+                    <text x="200" y="200" class="txt sub">Write Bytes (struct.pack)</text>
+                    <path d="M 650 150 V 230 C 650 240 550 250 550 250" class="pth"/>
+                    <text x="600" y="200" class="txt sub">Read Bytes (struct.unpack)</text>
+
+                    <path d="M 250 100 Q 340 120 340 165" stroke-dasharray="5,5" class="pth"/>
+                    <text x="300" y="140" class="txt sub">Acquire Lock</text>
+                    <path d="M 550 100 Q 460 120 460 165" stroke-dasharray="5,5" class="pth"/>
+                    <text x="500" y="140" class="txt sub">Wait for Event</text>
+                </svg>
+            </div>
+        </section>
+
+        <section id="option3">
+            <h2>Option 3: More Efficient Data Formats</h2>
+            <p>Instead of text-based JSON, using a binary format can significantly reduce data size and the time spent on serialization/deserialization.</p>
+            <div class="infographic-grid">
+                <div class="infographic-box">
+                    <h4>JSON</h4>
+                    <p>Human-readable text format. Verbose but easy to debug.</p>
+                    <div class="infographic-data">{"speed": 95.5}</div>
+                    <p>Size: ~17 Bytes</p>
+                </div>
+                <div class="infographic-box">
+                    <h4>MessagePack</h4>
+                    <p>Binary format, like a compressed JSON. Not human-readable.</p>
+                    <div class="infographic-data">0x81 0xA5 speed 0xCB 0x40 0x57 0xE0...</div>
+                    <p>Size: ~15 Bytes</p>
+                </div>
+                <div class="infographic-box">
+                    <h4>Protocol Buffers</h4>
+                    <p>Schema-based binary format. Fastest and smallest, but requires a compilation step.</p>
+                    <div class="infographic-data">Schema: `float speed = 1;`<br/>Data: 0x0D 0x00 0x00 0xBE 0x42</div>
+                    <p>Size: ~5 Bytes</p>
+                </div>
+            </div>
+        </section>
+    </div>
+</body>
+</html>

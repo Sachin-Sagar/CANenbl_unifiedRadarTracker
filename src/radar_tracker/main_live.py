@@ -228,14 +228,13 @@ class RadarWorker(QObject):
             if not buffer:
                 continue
             
-            # --- THIS IS THE FIX ---
-            # The buffer is a list of (timestamp_str, value_str) tuples.
-            # We must parse them back to floats.
+            # The buffer is now a list of (timestamp, value) tuples.
+            # We can unpack them directly without parsing strings.
             try:
-                timestamps = [float(item[0]) for item in buffer]
-                values = [float(item[1]) for item in buffer]
-            except (ValueError, TypeError) as e:
-                logger.warning(f"[INTERPOLATION] Could not parse buffer for {signal_name}: {e}. Buffer: {buffer}")
+                timestamps = [item[0] for item in buffer]
+                values = [item[1] for item in buffer]
+            except (IndexError, TypeError) as e:
+                logger.warning(f"[INTERPOLATION] Could not unpack buffer for {signal_name}: {e}. Buffer: {buffer}")
                 continue
             # --- END OF FIX ---
 

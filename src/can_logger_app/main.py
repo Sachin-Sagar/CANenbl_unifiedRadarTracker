@@ -133,6 +133,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
     # --- 2. Initialize Multiprocessing Components ---
     print("\n[+] Initializing worker processes and dual pipelines...")
     manager = multiprocessing.Manager()
+    lock = manager.Lock() # Create a shared lock
 
     # --- DUAL PIPELINE: Create two separate queues for high and low frequency messages ---
     high_freq_raw_queue = multiprocessing.Queue(maxsize=config.HIGH_FREQ_QUEUE_SIZE)
@@ -196,7 +197,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
         for i in range(config.NUM_HIGH_FREQ_WORKERS):
             p = multiprocessing.Process(
                 target=processing_worker,
-                args=(i, db, high_freq_monitored_signals, high_freq_raw_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag, worker_signals_queue),
+                args=(i, db, high_freq_monitored_signals, high_freq_raw_queue, log_queue, perf_tracker, live_data_dict, lock, can_logger_ready, shutdown_flag, worker_signals_queue),
                 daemon=True,
                 name=f"HighFreqWorker-{i}"
             )
@@ -208,7 +209,7 @@ def main(shutdown_flag=None, output_dir=None, live_data_dict=None, can_interface
         for i in range(config.NUM_LOW_FREQ_WORKERS):
             p = multiprocessing.Process(
                 target=processing_worker,
-                args=(i + config.NUM_HIGH_FREQ_WORKERS, db, low_freq_monitored_signals, low_freq_raw_queue, log_queue, perf_tracker, live_data_dict, can_logger_ready, shutdown_flag, worker_signals_queue),
+                args=(i + config.NUM_HIGH_FREQ_WORKERS, db, low_freq_monitored_signals, low_freq_raw_queue, log_queue, perf_tracker, live_data_dict, lock, can_logger_ready, shutdown_flag, worker_signals_queue),
                 daemon=True,
                 name=f"LowFreqWorker-{i}"
             )

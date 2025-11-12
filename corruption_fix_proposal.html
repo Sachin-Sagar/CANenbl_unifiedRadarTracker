@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proposal to Fix Data Corruption Risks</title>
+    <style>
+        :root {
+            --bg-color: #1a1b26;
+            --fg-color: #c0caf5;
+            --card-bg: #24283b;
+            --header-bg: #7aa2f7;
+            --accent-blue: #7aa2f7;
+            --accent-green: #9ece6a;
+            --accent-orange: #ff9e64;
+            --accent-red: #f7768e;
+            --border-color: #414868;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            background-color: var(--bg-color);
+            color: var(--fg-color);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background-color: var(--card-bg);
+            border-bottom: 4px solid var(--header-bg);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            text-align: center;
+            border-radius: 8px;
+        }
+        header h1 { margin: 0; color: var(--header-bg); font-size: 2.5rem; }
+        h2 {
+            color: var(--accent-green);
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-top: 2rem;
+        }
+        h3 { color: var(--accent-orange); margin-top: 1.5rem; }
+        section {
+            background-color: var(--card-bg);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+        code {
+            background-color: var(--bg-color);
+            color: var(--accent-red);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: "Fira Code", monospace;
+        }
+        pre code {
+            display: block;
+            padding: 1rem;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .pros { color: var(--accent-green); }
+        .cons { color: var(--accent-red); }
+        .diagram-container {
+            text-align: center;
+            padding: 20px;
+            margin-top: 1rem;
+            background-color: #1e2233;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            overflow-x: auto;
+        }
+        .infographic-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            align-items: stretch;
+        }
+        .infographic-box {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 1rem;
+        }
+        .infographic-box h4 { margin: 0 0 0.5rem 0; color: var(--accent-blue); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Proposal to Fix Data Corruption Risks</h1>
+            <p>A detailed plan to remedy two critical sources of data corruption in the live data pipeline.</p>
+        </header>
+
+        <section id="problem1">
+            <h2>Problem 1: Race Condition and Data Loss</h2>
+            <p>The most severe issue is a race condition in <code>data_processor.py</code> where multiple decoder processes can overwrite each other's updates to the shared <code>live_data_dict</code>. This leads to silent data loss and results in the radar tracker using stale or incomplete data.</p>
+            
+            <div class="diagram-container">
+                <h3>Infographic: How the Race Condition Causes Data Loss</h3>
+                <svg viewBox="0 0 800 450" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="14px" fill="#c0caf5">
+                    <style>.box{fill:#2a2a2a;stroke:#414868;}.txt{fill:#c0caf5;text-anchor:middle;}.sub{font-size:12px;fill:#9a9a9a;}.pth{stroke:#7aa2f7;stroke-width:2;fill:none;marker-end:url(#arrow);}.bad{fill:#f7768e;}.good{fill:#9ece6a;}</style>
+                    <defs><marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7aa2f7"/></marker></defs>
+                    
+                    <text x="150" y="30" class="txt" font-weight="bold">Process A</text>
+                    <text x="400" y="30" class="txt" font-weight="bold">Shared Dictionary</text>
+                    <text x="650" y="30" class="txt" font-weight="bold">Process B</text>
+
+                    <rect x="300" y="50" width="200" height="40" rx="5" class="box"/><text x="400" y="75" class="txt">{'speed': [v1]}</text>
+                    
+                    <path d="M 150 70 H 300" class="pth"/><text x="225" y="65" class="sub">1. Reads [v1]</text>
+                    <path d="M 650 70 H 500" class="pth"/><text x="575" y="65" class="sub">2. Reads [v1]</text>
+
+                    <rect x="50" y="120" width="200" height="40" rx="5" class="box"/><text x="150" y="145" class="txt">Local copy: [v1, v2]</text>
+                    <rect x="550" y="120" width="200" height="40" rx="5" class="box"/><text x="650" y="145" class="txt">Local copy: [v1, v3]</text>
+
+                    <path d="M 150 160 V 200 H 300" class="pth"/><text x="225" y="185" class="sub">3. Writes back</text>
+                    <rect x="300" y="200" width="200" height="40" rx="5" class="box"/><text x="400" y="225" class="txt">{'speed': [v1, v2]}</text>
+
+                    <path d="M 650 160 V 270 H 500" class="pth"/><text x="575" y="255" class="sub">4. Writes back</text>
+                    <rect x="300" y="270" width="200" height="40" rx="5" class="box bad"/><text x="400" y="295" class="txt">{'speed': [v1, v3]}</text>
+
+                    <text x="400" y="350" class="txt bad" font-size="20px" font-weight="bold">Result: Value `v2` is lost forever!</text>
+                </svg>
+            </div>
+
+            <h3>Solution: Use a `multiprocessing.Lock`</h3>
+            <p>The most direct solution is to use a lock to ensure the read-modify-write operation is atomic. Only the process holding the lock can access the dictionary, preventing any other process from interfering.</p>
+            <ol>
+                <li><strong>Create Lock:</strong> A single <code>manager.Lock()</code> is created in <code>src/can_logger_app/main.py</code>.</li>
+                <li><strong>Share Lock:</strong> This lock is passed to every decoder worker process upon creation.</li>
+                <li><strong>Protect Critical Section:</strong> The update logic in <code>data_processor.py</code> is wrapped in a <code>with lock:</code> block, guaranteeing exclusive access.</li>
+            </ol>
+            <pre><code># In data_processor.py
+with lock:
+    buffer = live_data_dict.get(name, [])
+    buffer.append((timestamp, value))
+    live_data_dict[name] = buffer[-10:]</code></pre>
+        </section>
+
+        <section id="problem2">
+            <h2>Problem 2: Risky String-Based Serialization</h2>
+            <p>The current code converts all numbers to strings before placing them in the shared dictionary. This was likely done to avoid issues with NumPy types, but it introduces a severe risk of failure on systems with different regional settings and is inefficient.</p>
+
+            <div class="infographic-grid">
+                <div class="infographic-box">
+                    <h4>The Problem: Locale-Dependent `str()`</h4>
+                    <p>On a US/UK system:</p>
+                    <pre><code>str(123.45) -> "123.45"
+float("123.45") -> 123.45</code></pre>
+                    <p class="pros">This works correctly.</p>
+                </div>
+                <div class="infographic-box">
+                    <h4>The Problem: Locale-Dependent `str()`</h4>
+                    <p>On a German/French system:</p>
+                    <pre><code>str(123.45) -> "123,45"
+float("123,45") -> ValueError!</code></pre>
+                    <p class="cons">This crashes the application.</p>
+                </div>
+            </div>
+
+            <h3>Solution: Store Native Python Floats</h3>
+            <p>The correct solution is to stop converting to strings and instead ensure all numbers are standard Python `float` types, which are handled correctly and efficiently by the `multiprocessing` library.</p>
+            
+            <h4>1. Change the Producer (`data_processor.py`)</h4>
+            <pre><code># --- BEFORE ---
+timestamp_str = str(float(msg['timestamp']))
+value_str = str(float(final_value))
+buffer.append((timestamp_str, value_str))
+
+# --- AFTER ---
+timestamp = float(msg['timestamp'])
+value = float(final_value)
+buffer.append((timestamp, value)) # Store native float types</code></pre>
+
+            <h4>2. Change the Consumer (`main_live.py`)</h4>
+            <pre><code># --- BEFORE ---
+try:
+    timestamps = [float(item[0]) for item in buffer]
+    values = [float(item[1]) for item in buffer]
+except (ValueError, TypeError):
+    # ... error handling ...
+
+# --- AFTER ---
+# No string parsing needed, just unpack the tuple
+try:
+    timestamps = [item[0] for item in buffer]
+    values = [item[1] for item in buffer]
+except (IndexError, TypeError):
+    # ... error handling ...</code></pre>
+        </section>
+    </div>
+</body>
+</html>

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 LOG_ENTRY_FORMAT = struct.Struct('=dI32sd')
 
-def processing_worker(worker_id, db, signals_to_log, raw_queue, results_queue, perf_tracker, live_data_dict=None, can_logger_ready=None, shutdown_flag=None, worker_signals_queue=None):
+def processing_worker(worker_id, db, signals_to_log, raw_queue, results_queue, perf_tracker, live_data_dict=None, lock=None, can_logger_ready=None, shutdown_flag=None, worker_signals_queue=None):
     """
     MODIFIED: Accepts 'db' (cantools database object) and 'signals_to_log' (a set) instead of 'decoding_rules'.
     MODIFIED: Uses db.decode_message() for robust CAN signal decoding.
@@ -23,6 +23,7 @@ def processing_worker(worker_id, db, signals_to_log, raw_queue, results_queue, p
     MODIFIED: Now puts the entire log entry dictionary into the results_queue.
     MODIFIED: Now accepts a 'shutdown_flag' (a multiprocessing.Event) to signal when to stop processing.
     MODIFIED: Now accepts a 'worker_signals_queue' to send the final set of logged signals.
+    MODIFIED: Now accepts a 'lock' (a multiprocessing.Lock) to protect shared dictionary access.
     """
     local_logged_signals = set()
     
@@ -73,26 +74,24 @@ def processing_worker(worker_id, db, signals_to_log, raw_queue, results_queue, p
                             results_queue.put(log_entry)
                             
                             # --- 2. Share for live radar --- 
-                            if live_data_dict is not None:
-                                
-                                # --- THIS IS THE FIX ---
-                                # Cast to float first, then to string to prevent corruption.
-                                timestamp_str = str(float(msg['timestamp']))
-                                value_str = str(float(final_value))
-                                # --- END OF FIX ---
+                            if live_data_dict is not None and lock is not None:
+                                # --- FIX: Use a lock to ensure atomic update and store native floats ---
+                                with lock:
+                                    timestamp = float(msg['timestamp'])
+                                    value = float(final_value)
 
-                                # Use a simple list as the buffer
-                                buffer = live_data_dict.get(name, [])
-                                buffer.append((timestamp_str, value_str)) # Store strings
-                                # Keep the buffer trimmed to the last 10 values
-                                live_data_dict[name] = buffer[-10:]
+                                    # Use a simple list as the buffer
+                                    buffer = live_data_dict.get(name, [])
+                                    buffer.append((timestamp, value)) # Store native floats
+                                    # Keep the buffer trimmed to the last 10 values
+                                    live_data_dict[name] = buffer[-10:]
 
-                                # --- MODIFIED: Check for all critical signals before setting the ready event ---
-                                if can_logger_ready and not can_logger_ready.is_set():
-                                    # Check if all critical signals are now present in the live data dict
-                                    if all(sig in live_data_dict for sig in config.CRITICAL_SIGNALS_FOR_START):
-                                        logger.info(f"[WORKER {worker_id}] All critical signals received. Setting CAN logger ready event.")
-                                        can_logger_ready.set()
+                                    # --- MODIFIED: Check for all critical signals before setting the ready event ---
+                                    if can_logger_ready and not can_logger_ready.is_set():
+                                        # Check if all critical signals are now present in the live data dict
+                                        if all(sig in live_data_dict for sig in config.CRITICAL_SIGNALS_FOR_START):
+                                            logger.info(f"[WORKER {worker_id}] All critical signals received. Setting CAN logger ready event.")
+                                            can_logger_ready.set()
 
                             local_logged_signals.add(name)
 

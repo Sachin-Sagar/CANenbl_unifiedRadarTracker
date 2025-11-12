@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Robust Ego-Motion Estimation:** Implemented a feature to improve the robustness of the ego-motion estimation algorithm. The tracker now checks the `ETS_VCU_imuProc_imuStuck_B` CAN signal. If this flag is true (indicating a faulty IMU), the algorithm will disregard the `EstimatedGrade_Est_Deg` signal, preventing corrupted data from affecting the vehicle's dynamics calculations.
 
+### [1.3.5] - 2025-11-12
+
+#### Fixed
+- **Critical Data Loss in Live CAN Data Pipeline:** Addressed a severe race condition in `src/can_logger_app/data_processor.py` where multiple worker processes could overwrite each other's updates to the `live_data_dict`. This was resolved by implementing a `multiprocessing.Lock` to ensure atomic read-modify-write operations, preventing silent data loss.
+- **Risky String-Based Data Serialization:** Corrected an inefficient and locale-dependent data transfer method for live CAN signals. Previously, `float` values were converted to `str` in `src/can_logger_app/data_processor.py` and then parsed back to `float` in `src/radar_tracker/main_live.py`. This was prone to `ValueError` on systems with different decimal separators. The fix now ensures native Python `float` types are stored directly in the shared dictionary, improving robustness and performance.
+
 ## [1.3.3] - 2025-11-10
 
 ### Fixed
