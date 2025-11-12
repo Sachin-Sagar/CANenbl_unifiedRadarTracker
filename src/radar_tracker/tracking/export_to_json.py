@@ -1,157 +1,206 @@
-# src/export_to_json.py
+# src/tracking/export_to_json.py
 
 import numpy as np
-import logging
+from .utils.calculate_ellipse_radii import calculate_ellipse_radii
+from .utils.coordinate_transforms import cartesian_to_polar, polar_to_cartesian
 
-def _sanitize_for_json(value):
-    """
-    Helper function to prepare a value for JSON serialization, matching MATLAB's quirks.
-    - Converts infinity and NaN to None (which becomes 'null').
-    - Extracts the scalar value if it's a single-element list or numpy array.
-    """
-    if isinstance(value, (list, np.ndarray)):
-        if len(value) == 1:
-            value = value[0]
-        else:
-            # If it's still a list/array, return it for the encoder to handle
-            return value
-
-    if isinstance(value, (float, np.floating)):
-        if np.isinf(value) or np.isnan(value):
-            return None
-    
-    # --- ADDED CHECK ---
-    # Explicitly handle the case where the input is already None
-    if value is None:
+def _convert_track_to_dict(track, params):
+    """Converts a single Track object to a JSON-serializable dictionary."""
+    if track.isLost:
         return None
+
+    # Calculate ellipse for visualization
+    radii, angle_rad = calculate_ellipse_radii(track.immState.S, 0.95)
     
-    return value
+    # Get the correct model for kinematics
+    c_model = np.argmax(track.immState.mu)
+    state_vec = track.immState.X[c_model]
+    
+    # Use polar coordinates for the primary state
+    r, az, vr = cartesian_to_polar(state_vec[0], state_vec[1], state_vec[2], state_vec[3])
 
+    return {
+        "id": track.id,
+        "isConfirmed": track.isConfirmed,
+        "isLost": track.isLost,
+        "age": track.age,
+        "hits": track.hits,
+        "misses": track.misses,
+        "x": float(state_vec[0]),
+        "y": float(state_vec[1]),
+        "vx": float(state_vec[2]),
+        "vy": float(state_vec[3]),
+        "ax": float(state_vec[4]) if len(state_vec) > 4 else 0.0,
+        "ay": float(state_vec[5]) if len(state_vec) > 5 else 0.0,
+        "range": float(r),
+        "azimuth": float(np.rad2deg(az)),
+        "radialSpeed": float(vr),
+        "S_ellipse_radii": [float(radii[0]), float(radii[1])],
+        "S_ellipse_angle_deg": float(np.rad2deg(angle_rad)),
+        "modelProbabilities": [float(mu) for mu in track.immState.mu],
+        "ttc": track.ttc if track.ttc is not None else float('inf'),
+        "ttcCategory": track.ttcCategory
+    }
 
-def create_visualization_data(all_tracks, fhist, params):
+def _convert_cluster_to_dict(cluster):
+    """Converts a single cluster object to a JSON-serializable dictionary."""
+    if cluster is None:
+        return None
+
+    x_mean = getattr(cluster, 'x_mean', np.nan)
+    y_mean = getattr(cluster, 'y_mean', np.nan)
+    vx_mean = getattr(cluster, 'vx_mean', np.nan)
+    vy_mean = getattr(cluster, 'vy_mean', np.nan)
+    
+    r, az, vr = cartesian_to_polar(x_mean, y_mean, vx_mean, vy_mean)
+
+    return {
+        "id": cluster.id,
+        "radialSpeed": float(vr),
+        "vx": float(vx_mean),
+        "vy": float(vy_mean),
+        "azimuth": float(np.rad2deg(az)),
+        "isOutlier": cluster.isOutlier,
+        "isStationaryInBox": cluster.isStationaryInBox,
+        "x": float(x_mean),
+        "y": float(y_mean)
+    }
+
+def _convert_point_to_dict(point):
+    """Converts a single point (as a dictionary) to a JSON-serializable dictionary."""
+    if point is None:
+        return None
+
+    x = point.get('x', np.nan)
+    y = point.get('y', np.nan)
+    v = point.get('velocity', np.nan)
+    snr = point.get('snr', np.nan)
+    cluster_num = point.get('clusterNumber', -1)
+    is_outlier = point.get('isOutlier', False)
+
+    return {
+        "x": float(x),
+        "y": float(y),
+        "velocity": float(v),
+        "snr": float(snr),
+        "clusterNumber": int(cluster_num),
+        "isOutlier": bool(is_outlier)
+    }
+
+def create_visualization_data(all_tracks, fhist, params=None):
     """
-    Builds a dictionary with 'radarFrames' and 'tracks' keys, meticulously
-    matching the MATLAB JSON schema for downstream applications.
+    Creates the final dictionary for JSON export, containing both radar frames
+    and confirmed tracks.
     """
-    debug_mode = params.get('debug_mode', False)
-    if debug_mode: logging.info("Building final visualization data structure for JSON export...")
-
-    visualization_data = {}
-
-    # --- 1. Process Radar Frames (fHist) ---
-    radar_frames_list = []
-    for i, frame_data in enumerate(fhist):
-        def get_attr_safe(obj, attr, default=None):
-            val = getattr(obj, attr, default)
-            # Return the value directly if it's not a float that is nan
-            if not (isinstance(val, (float, np.floating)) and np.isnan(val)):
-                return val
-            return None # Return None for NaN floats
-
-        # --- MODIFIED SECTION TO PREVENT CRASH ---
-        # Get the gear value safely
-        gear_val = get_attr_safe(frame_data, 'ETS_VCU_Gear_Engaged_St_enum', None)
-        # Convert to float only if it's a valid number, otherwise keep it None
-        if gear_val is not None:
-            try:
-                gear_val = float(gear_val)
-            except (ValueError, TypeError):
-                gear_val = None # Handle cases where it might be a non-numeric string
+    if params is None:
+        params = {}
         
-        # --- THIS IS THE FIX ---
-        # The dictionary keys ('canVehSpeed_kmph', 'shaftTorque_Nm', etc.) are the 
-        # final JSON field names.
-        # The values (get_attr_safe(...)) now read from the correct FHistFrame attributes
-        # that you populated in the data_adapter.
-        frame_dict = {
-            'timestamp': get_attr_safe(frame_data, 'timestamp'), 'frameIdx': i,
-            'motionState': get_attr_safe(frame_data, 'motionState'),
-            'egoVelocity': [get_attr_safe(frame_data, 'egoVx', 0), get_attr_safe(frame_data, 'egoVy', 0)],
-            'canVehSpeed_kmph': get_attr_safe(frame_data, 'ETS_VCU_VehSpeed_Act_kmph'),
-            'correctedEgoSpeed_mps': get_attr_safe(frame_data, 'correctedEgoSpeed_mps'),
-            'shaftTorque_Nm': get_attr_safe(frame_data, 'ETS_MOT_ShaftTorque_Est_Nm'),
-            'engagedGear': gear_val,
+    output_data = {
+        "radarFrames": [],
+        "tracks": []
+    }
+
+    # Process all radar frames
+    for frame in fhist:
+        if frame is None:
+            continue
             
-            # --- ADDED FOR STEP 4 ---
-            'roadGrade_Deg': get_attr_safe(frame_data, 'EstimatedGrade_Est_Deg'),
-            # --- END OF STEP 4 FIX ---
+        # Handle ego velocity (which might be None or NaN)
+        ego_vx = getattr(frame, 'egoVx', None)
+        ego_vy = getattr(frame, 'egoVy', None)
+        if not np.isfinite(ego_vx): ego_vx = None
+        if not np.isfinite(ego_vy): ego_vy = None
+
+        # --- THIS IS THE FULLY CORRECTED SECTION ---
+        
+        # 1. Safely get the can_signals dictionary from the frame object
+        can_signals = getattr(frame, 'can_signals', {})
+
+        # 2. Build the frame_output dictionary using getattr for frame object properties
+        #    and .get() for the can_signals dictionary
+        frame_output = {
+            "timestamp": getattr(frame, 'timestamp', None),
+            "frameIdx": getattr(frame, 'frameIdx', None),
+            "motionState": getattr(frame, 'motionState', None),
+            "egoVelocity": [ego_vx, ego_vy],
+            "canVehSpeed_kmph": getattr(frame, 'canVehSpeed_kmph', None),
             
-            'estimatedAcceleration_mps2': get_attr_safe(frame_data, 'estimatedAcceleration_mps2'),
-            'iirFilteredVx_ransac': get_attr_safe(frame_data, 'iirFilteredVx_ransac'),
-            'iirFilteredVy_ransac': get_attr_safe(frame_data, 'iirFilteredVy_ransac'),
-            'clusters': [], 'pointCloud': []
+            # --- ADDED PER YOUR REQUEST ---
+            "ETS_VCU_AccelPedal_Act_perc": can_signals.get('ETS_VCU_AccelPedal_Act_perc', None),
+            # --- END OF ADDITION ---
+            
+            "correctedEgoSpeed_mps": getattr(frame, 'correctedEgoSpeed_mps', None),
+            "shaftTorque_Nm": getattr(frame, 'shaftTorque_Nm', None),
+            "engagedGear": getattr(frame, 'engagedGear', None),
+            "roadGrade_Deg": getattr(frame, 'roadGrade_Deg', None),
+            "estimatedAcceleration_mps2": getattr(frame, 'estimatedAcceleration_mps2', None),
+            "iirFilteredVx_ransac": getattr(frame, 'iirFilteredVx_ransac', 0.0),
+            "iirFilteredVy_ransac": getattr(frame, 'iirFilteredVy_ransac', 0.0),
+            "clusters": [],
+            "pointCloud": [],
+            # Safely access nested barrier object properties
+            "filtered_barrier_x": getattr(getattr(frame, 'filtered_barrier_x', {}), 'x', [params.get('barrierXMin'), params.get('barrierXMax')])
         }
+
+        # 3. Add all other CAN signals that aren't already manually placed
+        for signal_name, value in can_signals.items():
+            if signal_name not in frame_output:
+                frame_output[signal_name] = value
+        # --- END OF MODIFIED SECTION ---
+
+        # Add clusters
+        point_cloud_data = getattr(frame, 'pointCloud', None)
+        cluster_info = getattr(frame, 'detectedClusterInfo', None)
+
+        # --- THIS IS THE FIX ---
+        # Check .size > 0 for numpy arrays, or len() > 0 for lists
+        is_cluster_info_non_empty = False
+        if cluster_info is not None:
+            if isinstance(cluster_info, np.ndarray):
+                is_cluster_info_non_empty = cluster_info.size > 0
+            elif hasattr(cluster_info, '__len__'):
+                is_cluster_info_non_empty = len(cluster_info) > 0
+
+        if is_cluster_info_non_empty:
         # --- END OF FIX ---
-        
-        filtered_barrier = get_attr_safe(frame_data, 'filtered_barrier_x')
-        if filtered_barrier is not None and hasattr(filtered_barrier, 'left') and hasattr(filtered_barrier, 'right'):
-            frame_dict['filtered_barrier_x'] = [
-                get_attr_safe(filtered_barrier, 'left'), 
-                get_attr_safe(filtered_barrier, 'right')
-            ]
-        else:
-            frame_dict['filtered_barrier_x'] = None
-        
-        clusters_info = getattr(frame_data, 'detectedClusterInfo', np.array([]))
-        if clusters_info.size > 0:
-            cluster_list = []
-            for c in clusters_info:
-                cluster_obj = {
-                    'id': c.get('originalClusterID'), 'radialSpeed': c.get('radialSpeed'),
-                    'vx': c.get('vx'), 'vy': c.get('vy'), 'azimuth': c.get('azimuth'), 
-                    'isOutlier': c.get('isOutlierCluster'),
-                    'isStationaryInBox': c.get('isStationary_inBox', False)
+            for cluster in cluster_info:
+                cluster_dict = _convert_cluster_to_dict(cluster)
+                if cluster_dict:
+                    frame_output["clusters"].append(cluster_dict)
+
+        # Add point cloud
+        # --- THIS IS THE FIX ---
+        # Check if point_cloud_data is a dict, has 'x', and 'x' is not empty
+        is_point_cloud_non_empty = False
+        if point_cloud_data is not None and isinstance(point_cloud_data, dict) and 'x' in point_cloud_data:
+            point_x_array = point_cloud_data.get('x')
+            if point_x_array is not None:
+                if isinstance(point_x_array, np.ndarray):
+                    is_point_cloud_non_empty = point_x_array.size > 0
+                elif hasattr(point_x_array, '__len__'):
+                    is_point_cloud_non_empty = len(point_x_array) > 0
+
+        if is_point_cloud_non_empty:
+        # --- END OF FIX ---
+            for i in range(len(point_cloud_data['x'])):
+                point = {
+                    'x': point_cloud_data['x'][i],
+                    'y': point_cloud_data['y'][i],
+                    'velocity': point_cloud_data['velocity'][i],
+                    'snr': point_cloud_data['snr'][i],
+                    'clusterNumber': point_cloud_data['clusterNumber'][i],
+                    'isOutlier': point_cloud_data['isOutlier'][i]
                 }
-                if c.get('X') is not None: cluster_obj['x'] = c.get('X')
-                if c.get('Y') is not None: cluster_obj['y'] = c.get('Y')
-                cluster_list.append(cluster_obj)
-            frame_dict['clusters'] = cluster_list
+                point_dict = _convert_point_to_dict(point)
+                if point_dict:
+                    frame_output["pointCloud"].append(point_dict)
 
-        point_cloud_data = getattr(frame_data, 'pointCloud', None)
-        if point_cloud_data is not None and point_cloud_data.size > 0:
-            num_points = frame_data.posLocal.shape[1]
-            frame_dict['pointCloud'] = [
-                {'x': frame_data.posLocal[0, j], 'y': frame_data.posLocal[1, j],
-                 'velocity': point_cloud_data[3, j] if point_cloud_data.shape[0] > 3 else None,
-                 'snr': point_cloud_data[4, j] if point_cloud_data.shape[0] > 4 else None,
-                 'clusterNumber': int(frame_data.dbscanClusters[j]) if hasattr(frame_data, 'dbscanClusters') and j < len(frame_data.dbscanClusters) else None,
-                 'isOutlier': bool(frame_data.isOutlier[j]) if hasattr(frame_data, 'isOutlier') and j < len(frame_data.isOutlier) else None
-                } for j in range(num_points)
-            ]
-        
-        radar_frames_list.append(frame_dict)
-    visualization_data['radarFrames'] = radar_frames_list
+        output_data["radarFrames"].append(frame_output)
 
-    # --- 2. Process Tracks (allTracks) ---
-    tracks_list = []
+    # Process all tracks
     for track in all_tracks:
-        track_export_obj = {'id': track.get('id'), 'isConfirmed': track.get('isConfirmed', False), 'trackHistory': []}
-        if len(all_tracks) > 1:
-            track_export_obj['ttcCategoryTimeline'] = []
+        track_dict = _convert_track_to_dict(track, params)
+        if track_dict:
+            output_data["tracks"].append(track_dict)
 
-        if 'historyLog' in track and track['historyLog']:
-            for log_entry in track['historyLog']:
-                clean_log_entry = {
-                    'frameIdx': log_entry.get('frameIdx'),
-                    'predictedPosition': log_entry.get('predictedPosition'),
-                    'predictedVelocity': log_entry.get('predictedVelocity'),
-                    'correctedPosition': log_entry.get('correctedPosition'),
-                    'ttc': _sanitize_for_json(log_entry.get('ttc')),
-                    'isStationary': log_entry.get('isStationary'),
-                    'covarianceP': log_entry.get('covarianceP'),
-                    'ellipseRadii': log_entry.get('ellipseRadii'),
-                    # Use the _sanitize_for_json helper for the angle as well
-                    'ellipseAngle': _sanitize_for_json(log_entry.get('orientationAngle'))
-                }
-                track_export_obj['trackHistory'].append(clean_log_entry)
-                
-                if 'ttcCategoryTimeline' in track_export_obj:
-                    if log_entry.get('ttcCategory') is not None and log_entry.get('frameIdx') is not None:
-                        track_export_obj['ttcCategoryTimeline'].append(
-                            {'frameIdx': log_entry['frameIdx'], 'ttcCategory': log_entry['ttcCategory']}
-                        )
-        tracks_list.append(track_export_obj)
-    visualization_data['tracks'] = tracks_list
-    
-    if debug_mode: logging.info("Finished building visualization data with strict schema.")
-    return visualization_data
+    return output_data

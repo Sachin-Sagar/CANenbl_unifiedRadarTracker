@@ -189,15 +189,30 @@ class RadarWorker(QObject):
         if self.shared_live_can_data is None:
             return {}
 
-        # Create a deep copy of the shared data to avoid proxy issues
+        # --- START: THIS IS THE FIX ---
+        # Instead of deepcopying the proxy, we access the proxy to
+        # create a new, local-in-this-process dictionary.
+        can_buffers = {}
         try:
-            # Convert the ManagerProxy to a regular dict and then deepcopy it
-            can_buffers = copy.deepcopy(dict(self.shared_live_can_data))
+            # 1. Convert the Manager.dict proxy to a local dict.
+            #    The values in this dict are still *proxies* to the deques.
+            can_buffers_proxy = dict(self.shared_live_can_data)
+
+            # 2. Iterate the local dict and convert each deque proxy
+            #    to a local list. This forces the IPC manager to
+            #    fetch the *actual data* from the other process.
+            for signal_name, deque_proxy in can_buffers_proxy.items():
+                can_buffers[signal_name] = list(deque_proxy)
+
             if root_config.DEBUG_FLAGS.get('log_can_interpolation'):
                 logger.debug(f"[INTERPOLATION] Copied shared data: {can_buffers}")
+
         except Exception as e:
-            logger.error(f"[INTERPOLATION] Failed to deepcopy shared_live_can_data: {e}")
+            # This can happen if the other process is shutting down
+            logger.error(f"[INTERPOLATION] Failed to access shared_live_can_data: {e}")
             can_buffers = {}
+        # --- END: THIS IS THE FIX ---
+            
         radar_posix_timestamp = radar_timestamp_ms / 1000.0
 
         if root_config.DEBUG_FLAGS.get('log_can_interpolation'):
