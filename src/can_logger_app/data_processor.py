@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 LOG_ENTRY_FORMAT = struct.Struct('=dI32sd')
 
-def processing_worker(worker_id, db, signals_to_log, raw_queue, results_queue, perf_tracker, live_data_dict=None, lock=None, can_logger_ready=None, shutdown_flag=None, worker_signals_queue=None):
+def processing_worker(worker_id, db, signals_to_log, raw_queue, results_queue, perf_tracker, live_data_dict=None, lock=None, can_logger_ready=None, shutdown_flag=None, worker_signals_queue=None, found_signals_list=None):
     """
     MODIFIED: Accepts 'db' (cantools database object) and 'signals_to_log' (a set) instead of 'decoding_rules'.
     MODIFIED: Uses db.decode_message() for robust CAN signal decoding.
@@ -24,6 +24,7 @@ def processing_worker(worker_id, db, signals_to_log, raw_queue, results_queue, p
     MODIFIED: Now accepts a 'shutdown_flag' (a multiprocessing.Event) to signal when to stop processing.
     MODIFIED: Now accepts a 'worker_signals_queue' to send the final set of logged signals.
     MODIFIED: Now accepts a 'lock' (a multiprocessing.Lock) to protect shared dictionary access.
+    MODIFIED: Now accepts a 'found_signals_list' (a Manager.list()) for real-time test monitoring.
     """
     local_logged_signals = set()
     
@@ -94,6 +95,10 @@ def processing_worker(worker_id, db, signals_to_log, raw_queue, results_queue, p
                                             can_logger_ready.set()
 
                             local_logged_signals.add(name)
+
+                            # --- 3. Share found signals for efficient testing ---
+                            if found_signals_list is not None and name not in found_signals_list:
+                                found_signals_list.append(name)
 
                     end_time = time.perf_counter()
                     duration = (end_time - start_time)

@@ -30,7 +30,10 @@ All tests are run through the main interactive runner, `tests/tests_main.py`, wh
     1.  The test runner (`tests/lib/main_app_logic_test_runner.py`) imports the `processing_worker` and `utils` directly from `src/can_logger_app`.
     2.  It parses the `2w_sample.log` file and populates the high and low-frequency queues.
     3.  It instantiates the full dual-pipeline system with separate worker pools for each queue.
-*   **Current Status:** **FAILING**. The test currently fails because the `logged_signals_set` remains empty, meaning the test harness is not correctly capturing the output from the worker processes. This indicates a bug in the test's implementation, not necessarily in the application code itself.
+*   **Current Status:** **PASSING**. The test previously failed due to a series of complex, interconnected issues.
+    *   **Initial Failure:** An `AssertionError` was caused by incorrect signal name stripping and the use of a wrong DBC file, which prevented any signals from being logged.
+    *   **Timeout Failure:** After fixing the data issues, the test began to time out because the subprocess was taking too long to process the entire log file.
+    *   **Resolution:** The test was refactored to use an efficient polling mechanism that stops the test as soon as the required signals are found. Additionally, the worker processes were made daemonic (`daemon=True`) to ensure they terminate cleanly with the main test script. This created a fast and reliable test.
 
 ### `test_live_data_pipeline.py`
 
@@ -44,7 +47,7 @@ All tests are run through the main interactive runner, `tests/tests_main.py`, wh
 ### `test_can_service.py`
 
 *   **Purpose:** To run an integration test on a legacy version of the CAN handling logic (`LiveCANManager` from the deprecated `src/can_service` directory).
-*   **Current Status:** **FAILING**. The test fails because the interpolated speed value it calculates (2.0) does not match the expected value (4.0). As this test targets deprecated code, its failure is not a primary concern for current development.
+*   **Current Status:** **FAILING**. This test targets deprecated code from the `src/can_service` directory and is not a priority for current development. Its failure is expected and does not impact the main application's functionality.
 
 ### `tests_main.py`
 

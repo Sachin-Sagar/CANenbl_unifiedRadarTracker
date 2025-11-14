@@ -141,57 +141,13 @@
             <tbody>
                 <tr>
                     <td>Test times out with <code>subprocess.TimeoutExpired</code>.</td>
-                    <td>The test runner's <code>time.sleep()</code> and the parent process's <code>timeout</code> are too short for the actual processing time, even though the subprocess successfully logs all signals.</td>
-                    <td><span class="status status-resolved">Resolved (by increasing timeouts)</span></td>
+                    <td>The test runner's fixed <code>time.sleep()</code> and the parent process's <code>timeout</code> were too short. This was resolved by implementing an efficient polling mechanism to detect when required signals are logged and by making worker processes daemonic to ensure timely termination.</td>
+                    <td><span class="status status-resolved">Resolved</span></td>
                 </tr>
             </tbody>
         </table>
 
-        <h3>Visualizing the Final Problem</h3>
-        <p>The diagram below illustrates the final, simple error. The test is trying to sort messages into high/low queues using the wrong map structure, causing a crash before any data can be processed.</p>
 
-        <div class="diagram">
-            <div class="diagram-title">Diagram: The Incorrect Map Lookup</div>
-            <svg width="95%" viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#495057" />
-                    </marker>
-                    <marker id="arrow-broken" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#dc3545" />
-                    </marker>
-                </defs>
-
-                <!-- Data Source -->
-                <rect x="50" y="50" width="150" height="80" rx="10" fill="#e9ecef" stroke="#adb5bd" stroke-width="2"/>
-                <text x="125" y="85" font-size="16" text-anchor="middle">Mock Message</text>
-                <text x="125" y="105" font-size="14" text-anchor="middle">(ID: 0x0AD)</text>
-
-                <path d="M 200 90 H 250" stroke="#495057" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
-                <text x="210" y="80" font-size="14">Is checked against</text>
-
-                <!-- The Incorrect Map -->
-                <rect x="250" y="50" width="200" height="120" rx="10" fill="#fff3cd" stroke="#ffc107" stroke-width="2"/>
-                <text x="350" y="75" font-size="16" text-anchor="middle">id_to_queue_map</text>
-                <text x="350" y="100" font-family="monospace" font-size="12" text-anchor="middle">{'high': {0x9A, 0x9B...}}</text>
-                <text x="350" y="120" font-family="monospace" font-size="12" text-anchor="middle">{'low': {0x30E, 0x30F...}}</text>
-                <text x="350" y="145" font-size="12" text-anchor="middle" fill="#dc3545">(Incorrect Assumption)</text>
-
-                <!-- The Crash -->
-                <path d="M 450 110 H 500" stroke="#dc3545" stroke-width="3" fill="none" marker-end="url(#arrow-broken)"/>
-                <rect x="500" y="85" width="200" height="50" rx="5" fill="#f8d7da" stroke="#dc3545" stroke-width="2"/>
-                <text x="600" y="115" font-size="16" text-anchor="middle" font-weight="bold" fill="#dc3545">KeyError: 'high'</text>
-
-                <!-- Correct Map Structure -->
-                <rect x="250" y="230" width="200" height="120" rx="10" fill="#d4edda" stroke="#28a745" stroke-width="2"/>
-                <text x="350" y="255" font-size="16" text-anchor="middle">Correct Structure</text>
-                <text x="350" y="280" font-family="monospace" font-size="12" text-anchor="middle">{0x9A: 'high',</text>
-                <text x="350" y="300" font-family="monospace" font-size="12" text-anchor="middle"> 0x9B: 'high',</text>
-                <text x="350" y="320" font-family="monospace" font-size="12" text-anchor="middle"> 0x30E: 'low', ...}</text>
-                <text x="350" y="340" font-size="12" text-anchor="middle" fill="#28a745">(Actual Structure)</text>
-
-            </svg>
-        </div>
 
         <h2>Conclusion</h2>
         <p>The test suite is now stable and free of critical crashing errors. The core logic of the dual-pipeline test is now functioning correctly, with all signals being successfully logged by the subprocess. The final issue was a timeout, which was resolved by increasing the `time.sleep()` duration in the runner script and the `timeout` in the parent test process. The entire test suite is now fully operational.</p>

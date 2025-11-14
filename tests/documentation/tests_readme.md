@@ -95,4 +95,4 @@ At the end of the run, a summary of passed, failed, and errored tests is printed
 
 ### `test_main_app_logic.py`
 -   **Purpose**: A hardware-free integration test of the main application's dual-pipeline architecture, using the actual application code from `src/can_logger_app`.
--   **Note**: This test is currently **failing**. It is unable to verify that signals are being logged, indicating a bug in how the test harness interacts with the application code.
+-   **Note**: This test is now **passing**. The previous failures were resolved by correcting the test's data file paths and implementing a robust polling mechanism to handle the asynchronous nature of the multiprocessing workers.

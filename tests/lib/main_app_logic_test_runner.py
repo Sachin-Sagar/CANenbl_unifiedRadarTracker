@@ -56,6 +56,7 @@ def main():
     log_queue, worker_signals_queue = multiprocessing.Queue(), multiprocessing.Queue()
     perf_tracker = manager.dict()
     shutdown_flag = multiprocessing.Event()
+    found_signals_list = manager.list()
     
     # Load configuration
     db = cantools.database.load_file(dbc_path)
@@ -75,28 +76,30 @@ def main():
     # Start the worker pools
     all_processes = []
     for i in range(can_logger_config.NUM_HIGH_FREQ_WORKERS):
-        p = multiprocessing.Process(target=processing_worker, args=(i, db, high_freq_monitored_signals, high_freq_raw_queue, log_queue, perf_tracker, None, None, None, shutdown_flag, worker_signals_queue), daemon=False)
+        p = multiprocessing.Process(target=processing_worker, args=(i, db, high_freq_monitored_signals, high_freq_raw_queue, log_queue, perf_tracker, None, None, None, shutdown_flag, None, found_signals_list), daemon=True)
         all_processes.append(p)
         p.start()
     for i in range(can_logger_config.NUM_LOW_FREQ_WORKERS):
-        p = multiprocessing.Process(target=processing_worker, args=(i + can_logger_config.NUM_HIGH_FREQ_WORKERS, db, low_freq_monitored_signals, low_freq_raw_queue, log_queue, perf_tracker, None, None, None, shutdown_flag, worker_signals_queue), daemon=False)
+        p = multiprocessing.Process(target=processing_worker, args=(i + can_logger_config.NUM_HIGH_FREQ_WORKERS, db, low_freq_monitored_signals, low_freq_raw_queue, log_queue, perf_tracker, None, None, None, shutdown_flag, None, found_signals_list), daemon=True)
         all_processes.append(p)
         p.start()
 
-    # Give some time for workers to process messages
-    time.sleep(10)
+    # --- NEW: Efficiently wait for required signals ---
+    required_signals = {'ETS_MOT_ShaftTorque_Est_Nm', 'ETS_VCU_VehSpeed_Act_kmph'}
+    start_time = time.time()
+    while time.time() - start_time < 30: # 30-second timeout
+        found_set = set(found_signals_list)
+        if required_signals.issubset(found_set):
+            break
+        time.sleep(0.1)
+    
     shutdown_flag.set()
     
     # Wait for worker processes to terminate
-    for p in all_processes: p.join(timeout=2)
+    for p in all_processes: p.join(timeout=5)
 
     # Aggregate and assert results
-    logged_signals_set = set()
-    while not worker_signals_queue.empty():
-        try:
-            logged_signals_set.update(worker_signals_queue.get_nowait())
-        except queue.Empty:
-            break
+    logged_signals_set = set(found_signals_list)
     
     print(f"\n--- Test Results ---")
     print(f"Signals logged: {logged_signals_set}")

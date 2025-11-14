@@ -69,7 +69,7 @@ class TestMainAppLogic(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 check=True,
-                timeout=60
+                timeout=30
             )
             print("\n--- Subprocess Output ---")
             print(result.stdout)

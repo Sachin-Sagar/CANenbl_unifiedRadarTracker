@@ -277,6 +277,7 @@
                     <li>It then verifies that the signal interpolation logic produces the correct value.</li>
                 </ul>
             </li>
+            <li><strong>Status:</strong> This test targets deprecated code from the <code>src/can_service</code> directory. Its failure is expected and does not impact the main application's functionality.</li>
         </ul>
 
         <h3><code>test_can_log_playback.py</code></h3>
@@ -289,86 +290,6 @@
         <ul>
             <li><strong>Purpose:</strong> To act as a centralized test runner for the entire suite.</li>
             <li><strong>Functionality:</strong> It uses Python's built-in <code>unittest</code> library to automatically discover and execute all test files matching the pattern <code>test_*.py</code> within the <code>test_cases</code> directory.</li>
-        </ul>
-    </section>
-
-    <section class="card">
-        <h2>Verifying the Dual-Pipeline Logic</h2>
-        <p>A critical bug was identified where the main application was unable to log low-frequency (100ms) signals, while high-frequency (10ms) signals were logged correctly. The initial investigation confirmed the dual-pipeline code in <code>src/can_logger_app</code> appeared logically correct, and the issue was traced to a missing <code>master_sigList.txt</code> file in the <code>input/</code> directory.</p>
-        <p>To confirm this fix without requiring live hardware, a temporary test script (<code>test_main_app_logic.py</code>) was created.</p>
-        
-        <div class="diagram">
-            <h3>Dual-Pipeline Test Architecture</h3>
-            <svg viewBox="0 0 800 550" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="14">
-                <style>
-                    .box { fill: #eaf4ff; stroke: #0056b3; stroke-width: 1.5; }
-                    .process-box { fill: #e6f9f0; stroke: #28a745; stroke-width: 1.5; }
-                    .arrow { stroke: #333; stroke-width: 1.5; fill: none; }
-                    .arrow-head { fill: #333; }
-                    .text-label { fill: #212529; text-anchor: middle; }
-                    .sub-text { font-size: 12px; fill: #555; }
-                    .dashed-arrow { stroke-dasharray: 5, 5; }
-                </style>
-                <defs>
-                    <marker id="arrowhead-diag2" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
-                        <polygon points="0 0, 10 3.5, 0 7" class="arrow-head" />
-                    </marker>
-                </defs>
-
-                <!-- Input -->
-                <rect x="300" y="20" width="200" height="60" rx="10" class="box"/>
-                <text x="400" y="55" class="text-label">CAN Log File / Bus</text>
-
-                <!-- Dispatcher -->
-                <rect x="300" y="120" width="200" height="60" rx="10" class="process-box"/>
-                <text x="400" y="155" class="text-label">Dispatcher Thread</text>
-                <path d="M 400 80 V 120" class="arrow" marker-end="url(#arrowhead-diag2)"/>
-
-                <!-- High Freq Path -->
-                <rect x="50" y="220" width="200" height="60" rx="10" class="box"/>
-                <text x="150" y="255" class="text-label">High-Freq Queue</text>
-                <path d="M 350 180 C 350 200, 150 200, 150 220" class="arrow" marker-end="url(#arrowhead-diag2)"/>
-                <text x="250" y="195" class="sub-text">10ms IDs</text>
-
-                <rect x="50" y="320" width="200" height="60" rx="10" class="process-box"/>
-                <text x="150" y="355" class="text-label">High-Freq Worker Pool</text>
-                <path d="M 150 280 V 320" class="arrow" marker-end="url(#arrowhead-diag2)"/>
-
-                <!-- Low Freq Path -->
-                <rect x="550" y="220" width="200" height="60" rx="10" class="box"/>
-                <text x="650" y="255" class="text-label">Low-Freq Queue</text>
-                <path d="M 450 180 C 450 200, 650 200, 650 220" class="arrow" marker-end="url(#arrowhead-diag2)"/>
-                <text x="550" y="195" class="sub-text">100ms IDs</text>
-
-                <rect x="550" y="320" width="200" height="60" rx="10" class="process-box"/>
-                <text x="650" y="355" class="text-label">Low-Freq Worker Pool</text>
-                <path d="M 650 280 V 320" class="arrow" marker-end="url(#arrowhead-diag2)"/>
-
-                <!-- Shared Log Queue -->
-                <rect x="300" y="420" width="200" height="60" rx="10" class="box"/>
-                <text x="400" y="455" class="text-label">Shared Log Queue</text>
-                <path d="M 150 380 V 400 C 150 410, 300 430, 300 430" class="arrow dashed-arrow" marker-end="url(#arrowhead-diag2)"/>
-                <path d="M 650 380 V 400 C 650 410, 500 430, 500 430" class="arrow dashed-arrow" marker-end="url(#arrowhead-diag2)"/>
-                
-                <!-- Final Output -->
-                <rect x="300" y="500" width="200" height="40" rx="10" class="box" style="fill: #d4edda; stroke: #155724;"/>
-                <text x="400" y="525" class="text-label">can_log.json</text>
-                 <path d="M 400 480 V 500" class="arrow" marker-end="url(#arrowhead-diag2)"/>
-            </svg>
-        </div>
-        
-        <ul>
-            <li><strong>Purpose:</strong> To perform a hardware-free integration test of the main application's <em>actual</em> dual-pipeline architecture.</li>
-            <li><strong>Method:</strong>
-                <ol>
-                    <li>The test imported the <code>CANReader</code>, <code>processing_worker</code>, and <code>utils</code> directly from the <code>src/can_logger_app</code> module.</li>
-                    <li>It mocked the <code>can.interface.Bus</code> to play back messages from the <code>2w_sample.log</code> file.</li>
-                    <li>It instantiated the full dual-pipeline system: a <code>CANReader</code> dispatcher thread, a high-frequency queue and worker pool, and a low-frequency queue and worker pool.</li>
-                    <li>Each worker pool was given its correctly segregated list of signals to monitor, exactly as in the main application.</li>
-                </ol>
-            </li>
-            <li><strong>Result:</strong> The test <strong>passed</strong>. It successfully logged both a known high-frequency signal (<code>ETS_MOT_ShaftTorque_Est_Nm</code>) and a known low-frequency signal (<code>ETS_VCU_VehSpeed_Act_kmph</code>).</li>
-            <li><strong>Conclusion:</strong> This test definitively proved that the root cause of the missing 100ms signals was the absent <code>master_sigList.txt</code> file. With the input file present, the main application's core logic for segregating and processing high and low-frequency signals works as designed. The temporary test was subsequently removed.</li>
         </ul>
     </section>
 
