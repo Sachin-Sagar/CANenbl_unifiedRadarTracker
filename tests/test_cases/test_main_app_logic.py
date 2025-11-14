@@ -54,118 +54,42 @@ def parse_busmaster_log_for_test(file_path):
 
 class TestMainAppLogic(unittest.TestCase):
 
-    def setUp(self):
-        """Ensure necessary input files exist."""
-        self.root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
-        self.input_dir = os.path.join(self.root_dir, 'input')
-        self.dbc_path = os.path.join(self.input_dir, 'VCU.dbc')
-        self.signal_list_path = os.path.join(self.input_dir, 'master_sigList.txt')
-        self.log_file_path = os.path.join(self.root_dir, 'tests', 'test_data', '2w_sample.log')
-
-        self.assertTrue(os.path.exists(self.dbc_path), "VCU.dbc not found in input directory")
-        self.assertTrue(os.path.exists(self.signal_list_path), "master_sigList.txt not found in input directory")
-        self.assertTrue(os.path.exists(self.log_file_path), "2w_sample.log not found in test_data directory")
-
-    @unittest.mock.patch('can.interface.Bus')
-    def test_dual_pipeline_from_log_file(self, mock_bus_class):
+    def test_dual_pipeline_from_log_file(self):
         """
-        Tests the main application's dual-pipeline logic using a log file.
+        Tests the main application's dual-pipeline logic in an isolated process.
         """
-        # 1. Mock the CAN Bus to play back messages from the log file
-        log_messages = list(parse_busmaster_log_for_test(self.log_file_path))
-        self.assertGreater(len(log_messages), 0, "Log file parsing yielded no messages.")
-        
-        # The mock bus will return a message on each recv() call
-        mock_bus_instance = unittest.mock.MagicMock()
-        mock_bus_instance.recv.side_effect = log_messages + [None]*10 # Add Nones to terminate loop
-        mock_bus_class.return_value = mock_bus_instance
+        import subprocess
 
-        # 2. Load configuration (same as main app)
-        db = cantools.database.load_file(self.dbc_path)
-        high_freq_signals, low_freq_signals, id_to_queue_map = utils.load_signals_to_monitor(self.signal_list_path)
-        
-        high_freq_monitored_signals = {s for sig_set in high_freq_signals.values() for s in sig_set}
-        low_freq_monitored_signals = {s for sig_set in low_freq_signals.values() for s in sig_set}
+        runner_script_path = os.path.join(os.path.dirname(__file__), '..', 'lib', 'main_app_logic_test_runner.py')
+        self.assertTrue(os.path.exists(runner_script_path), f"Test runner script not found at {runner_script_path}")
 
-        self.assertGreater(len(high_freq_monitored_signals), 0, "No high-frequency signals loaded.")
-        self.assertGreater(len(low_freq_monitored_signals), 0, "No low-frequency signals loaded.")
-
-        # 3. Set up the dual-pipeline architecture
-        manager = multiprocessing.Manager()
-        high_freq_raw_queue = multiprocessing.Queue()
-        low_freq_raw_queue = multiprocessing.Queue()
-        log_queue = multiprocessing.Queue()
-        worker_signals_queue = multiprocessing.Queue()
-        perf_tracker = manager.dict()
-        shutdown_flag = multiprocessing.Event()
-
-        # 4. Start the CANReader thread
-        # This thread will read from the mocked bus and dispatch to the two queues
-        connection_event = threading.Event()
-        dispatcher_thread = CANReader(
-            bus_params={'interface': 'mock'}, # Params don't matter due to mock
-            data_queues={'high': high_freq_raw_queue, 'low': low_freq_raw_queue},
-            id_to_queue_map=id_to_queue_map,
-            perf_tracker=perf_tracker,
-            connection_event=connection_event,
-            shutdown_flag=shutdown_flag
-        )
-        dispatcher_thread.start()
-        connection_event.set() # Manually set event as we are not really connecting
-
-        # 5. Start the worker pools
-        high_freq_processes = []
-        for i in range(can_logger_config.NUM_HIGH_FREQ_WORKERS):
-            p = multiprocessing.Process(
-                target=processing_worker,
-                args=(i, db, high_freq_monitored_signals, high_freq_raw_queue, log_queue, perf_tracker, None, None, shutdown_flag, worker_signals_queue),
-                daemon=True
+        try:
+            result = subprocess.run(
+                [sys.executable, runner_script_path],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=60
             )
-            high_freq_processes.append(p)
-            p.start()
+            print("\n--- Subprocess Output ---")
+            print(result.stdout)
+            if result.stderr:
+                print("--- Subprocess Stderr ---")
+                print(result.stderr)
+            print("-------------------------\n")
 
-        low_freq_processes = []
-        for i in range(can_logger_config.NUM_LOW_FREQ_WORKERS):
-            p = multiprocessing.Process(
-                target=processing_worker,
-                args=(i + can_logger_config.NUM_HIGH_FREQ_WORKERS, db, low_freq_monitored_signals, low_freq_raw_queue, log_queue, perf_tracker, None, None, shutdown_flag, worker_signals_queue),
-                daemon=True
+        except subprocess.CalledProcessError as e:
+            self.fail(
+                f"The isolated test process failed with exit code {e.returncode}.\n"
+                f"--- STDOUT ---\n{e.stdout}\n"
+                f"--- STDERR ---\n{e.stderr}"
             )
-            low_freq_processes.append(p)
-            p.start()
-
-        # 6. Wait for processing to complete
-        # Give the system enough time to process all messages from the log file
-        time.sleep(5) 
-
-        # 7. Shut down gracefully
-        shutdown_flag.set()
-
-        dispatcher_thread.join(timeout=2)
-        for p in high_freq_processes + low_freq_processes:
-            p.join(timeout=2)
-
-        # 8. Aggregate results
-        logged_signals_set = set()
-        while not worker_signals_queue.empty():
-            try:
-                signal_set = worker_signals_queue.get_nowait()
-                logged_signals_set.update(signal_set)
-            except queue.Empty:
-                break
-        
-        # 9. Assertions
-        print(f"\n--- Test Results ---")
-        print(f"Signals logged: {logged_signals_set}")
-        
-        # Check for a known high-frequency signal
-        self.assertIn('ETS_MOT_ShaftTorque_Est_Nm', logged_signals_set, "A known high-frequency signal was not logged.")
-        
-        # Check for a known low-frequency signal
-        self.assertIn('ETS_VCU_VehSpeed_Act_kmph', logged_signals_set, "A known low-frequency signal was not logged.")
-        
-        print("Both high and low frequency signals were successfully logged.")
-        print("--------------------\n")
+        except subprocess.TimeoutExpired as e:
+            self.fail(
+                f"The isolated test process timed out.\n"
+                f"--- STDOUT ---\n{e.stdout}\n"
+                f"--- STDERR ---\n{e.stderr}"
+            )
 
 
 if __name__ == '__main__':

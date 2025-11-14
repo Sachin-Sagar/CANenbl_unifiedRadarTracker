@@ -299,320 +299,75 @@ def mock_radar_tracker_process(shared_dict, ready_event, shutdown_flag, output_d
 class TestLiveDataPipeline(unittest.TestCase):
 
     def setUp(self):
-        """Set up for the test."""
-        self.test_output_dir = os.path.join('tests', 'output', datetime.now().strftime("%Y%m%d_%H%M%S"))
-        print(f"DEBUG: Creating output directory: {self.test_output_dir}")
+        """Set up for the test by creating a unique output directory within the run's output folder."""
+        base_output_dir = os.environ.get('TEST_RUN_OUTPUT_DIR')
+        if not base_output_dir:
+            # Fallback for running this test file directly
+            base_output_dir = os.path.join('tests', 'output', 'live_pipeline_fallback')
+            os.makedirs(base_output_dir, exist_ok=True)
+
+        # Create a unique directory for this specific test case to avoid file collisions
+        self.test_output_dir = os.path.join(base_output_dir, f"{self.id()}_{time.strftime('%H%M%S')}")
         os.makedirs(self.test_output_dir, exist_ok=True)
-        print(f"DEBUG: Directory created: {os.path.exists(self.test_output_dir)}")
-        
-        self.track_history_file = os.path.join(self.test_output_dir, 'track_history.json')
+
+    def tearDown(self):
+        """Clean up the unique output directory created for the test."""
+        # This method is called after each test.
+        # We can choose to keep the directory if the test failed.
+        # For now, we will remove it unconditionally to keep the output clean.
+        if hasattr(self, 'test_output_dir') and os.path.exists(self.test_output_dir):
+            import shutil
+            shutil.rmtree(self.test_output_dir)
+
+    def _run_test_in_subprocess(self, test_name):
+        """Helper function to run a specific test from the runner script."""
+        import subprocess
+
+        runner_script_path = os.path.join(os.path.dirname(__file__), '..', 'lib', 'live_data_pipeline_test_runner.py')
+        self.assertTrue(os.path.exists(runner_script_path), f"Test runner script not found at {runner_script_path}")
+
+        try:
+            result = subprocess.run(
+                [sys.executable, runner_script_path, f'--test={test_name}', f'--output_dir={self.test_output_dir}'],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=30
+            )
+            print(f"\n--- Subprocess Output for {test_name} ---")
+            print(result.stdout)
+            if result.stderr:
+                print(f"--- Subprocess Stderr for {test_name} ---")
+                print(result.stderr)
+            print("-------------------------------------------\n")
+        except subprocess.CalledProcessError as e:
+            self.fail(
+                f"The isolated test '{test_name}' failed with exit code {e.returncode}.\n"
+                f"--- STDOUT ---\n{e.stdout}\n"
+                f"--- STDERR ---\n{e.stderr}"
+            )
+        except subprocess.TimeoutExpired as e:
+            self.fail(
+                f"The isolated test '{test_name}' timed out.\n"
+                f"--- STDOUT ---\n{e.stdout}\n"
+                f"--- STDERR ---\n{e.stderr}"
+            )
 
     def test_data_integrity_in_live_pipeline(self):
-        """
-        Test the full pipeline from a simulated CAN source to the final track history.
-        This test will:
-        1. Start a mock CAN logger process that provides constant, known values.
-        2. Start a mock radar tracker process that generates dummy radar data.
-        3. Pass CAN data from the logger to the tracker via a shared dictionary.
-        4. Verify that the CAN data in the final track_history.json is not corrupted.
-        """
-        manager = multiprocessing.Manager()
-        shared_live_can_data = manager.dict()
-        can_logger_ready = manager.Event()
-        shutdown_flag = manager.Event()
-
-        expected_values = {
-            'speed': 50.0, # kmph
-            'torque': 0.0, # Nm
-            'grade': 0.0 # Deg
-        }
-        expected_ego_vx_mps = expected_values['speed'] / 3.6 # Convert kmph to mps
-
-        radar_log_path = 'tests/test_data/sample_data/radar_log.json'
-        self.assertTrue(os.path.exists(radar_log_path), f"Radar log file not found at {radar_log_path}")
-
-        can_process = multiprocessing.Process(
-            target=mock_can_logger_process,
-            args=(shared_live_can_data, can_logger_ready, shutdown_flag, self.test_output_dir, expected_values)
-        )
-
-        # Process enough frames to ensure data is captured
-        num_frames = 50 
-        radar_process = multiprocessing.Process(
-            target=mock_radar_tracker_process,
-            args=(shared_live_can_data, can_logger_ready, shutdown_flag, self.test_output_dir, num_frames, radar_log_path)
-        )
-
-        print("Starting CAN logger and Radar tracker processes...")
-        can_process.start()
-        radar_process.start()
-
-        # Wait for processes to finish gracefully
-        can_process.join()
-        radar_process.join()
-
-        # Verification
-        self.assertTrue(os.path.exists(self.track_history_file), f"track_history.json was not created in {self.test_output_dir}")
-        
-        with open(self.track_history_file, 'r') as f:
-            history = json.load(f)
-        
-        self.assertIn('tracks', history, "The 'tracks' key is missing from track_history.json")
-        self.assertIn('radarFrames', history, "The 'radarFrames' key is missing from track_history.json")
-        
-        # --- VERIFICATION IS NOW DONE ON radarFrames ---
-        radar_frames = history['radarFrames']
-        self.assertGreater(len(radar_frames), 0, "The radarFrames list is empty.")
-
-        # Check the last few frames for the correct CAN data
-        num_frames_to_check = min(10, len(radar_frames))
-        self.assertGreater(num_frames_to_check, 0, "No frames to check in the radarFrames list.")
-
-        for i in range(1, num_frames_to_check + 1):
-            frame = radar_frames[-i]
-            
-            self.assertIn('canVehSpeed_kmph', frame, f"Frame {-i} is missing 'canVehSpeed_kmph'")
-            if frame['canVehSpeed_kmph'] is not None:
-                self.assertAlmostEqual(frame['canVehSpeed_kmph'], expected_values['speed'], delta=0.1, msg=f"Frame {-i} speed is incorrect")
-
-            self.assertIn('shaftTorque_Nm', frame, f"Frame {-i} is missing 'shaftTorque_Nm'")
-            if frame['shaftTorque_Nm'] is not None:
-                self.assertAlmostEqual(frame['shaftTorque_Nm'], expected_values['torque'], delta=0.1, msg=f"Frame {-i} torque is incorrect")
-
-            self.assertIn('roadGrade_Deg', frame, f"Frame {-i} is missing 'roadGrade_Deg'")
-            if frame['roadGrade_Deg'] is not None:
-                self.assertAlmostEqual(frame['roadGrade_Deg'], expected_values['grade'], delta=0.1, msg=f"Frame {-i} grade is incorrect")
-
-            # Check the egoVx which is derived from the CAN speed
-            self.assertIn('egoVelocity', frame, f"Frame {-i} is missing 'egoVelocity'")
-            if frame['egoVelocity'] and frame['egoVelocity'][0] is not None:
-                self.assertAlmostEqual(frame['egoVelocity'][0], expected_ego_vx_mps, delta=0.1, msg=f"Frame {-i} egoVx is incorrect")
-
-            self.assertIn('estimatedAcceleration_mps2', frame, f"Frame {-i} is missing 'estimatedAcceleration_mps2'")
-            # The acceleration should be close to zero since speed and grade are constant
-            if frame['estimatedAcceleration_mps2'] is not None:
-                self.assertAlmostEqual(frame['estimatedAcceleration_mps2'], 0.0, delta=0.5, msg=f"Frame {-i} estimatedAcceleration_mps2 is not close to zero")
-        
-        print(f"Test finished successfully. Output files are in: {self.test_output_dir}")
+        """Runs the data integrity test in an isolated process."""
+        self._run_test_in_subprocess('data_integrity')
 
     def test_startup_race_condition_fix(self):
-        """
-        Tests that the radar tracker waits for the CAN logger to be ready.
-        It uses a mock CAN logger that has an initial delay, simulating a
-        real-world startup sequence. The test verifies that the first frame
-        of data is valid, not garbage.
-        """
-        manager = multiprocessing.Manager()
-        shared_live_can_data = manager.dict()
-        can_logger_ready = manager.Event()
-        shutdown_flag = manager.Event()
-
-        expected_values = {
-            'speed': 3.0, # kmph
-            'torque': 5.0, # Nm
-            'grade': 1.0 # Deg
-        }
-        expected_ego_vx_mps = expected_values['speed'] / 3.6
-
-        radar_log_path = 'tests/test_data/sample_data/radar_log.json'
-        self.assertTrue(os.path.exists(radar_log_path), f"Radar log file not found at {radar_log_path}")
-
-        # Use the DELAYED mock CAN logger
-        can_process = multiprocessing.Process(
-            target=mock_can_logger_delayed_start,
-            args=(shared_live_can_data, can_logger_ready, shutdown_flag, self.test_output_dir, expected_values)
-        )
-
-        num_frames = 20 # Process fewer frames, we only care about the start
-        radar_process = multiprocessing.Process(
-            target=mock_radar_tracker_process,
-            args=(shared_live_can_data, can_logger_ready, shutdown_flag, self.test_output_dir, num_frames, radar_log_path)
-        )
-
-        print("Starting DELAYED CAN logger and Radar tracker processes...")
-        can_process.start()
-        radar_process.start()
-
-        can_process.join()
-        radar_process.join()
-
-        # Verification
-        self.assertTrue(os.path.exists(self.track_history_file), f"track_history.json was not created in {self.test_output_dir}")
-        
-        with open(self.track_history_file, 'r') as f:
-            history = json.load(f)
-        
-        self.assertIn('radarFrames', history)
-        radar_frames = history['radarFrames']
-        self.assertGreater(len(radar_frames), 0, "The radarFrames list is empty.")
-
-        # --- CRITICAL ASSERTION: Check the VERY FIRST frame in radarFrames ---
-        first_frame = radar_frames[0]
-        
-        self.assertIn('canVehSpeed_kmph', first_frame, "First frame is missing 'canVehSpeed_kmph'")
-        # The very first frame might have a slightly different interpolated value
-        # but it should NOT be a massive negative number.
-        self.assertIsNotNone(first_frame['canVehSpeed_kmph'], "First frame speed is None")
-        self.assertGreater(first_frame['canVehSpeed_kmph'], 0, "First frame speed should be positive")
-        self.assertLess(first_frame['canVehSpeed_kmph'], 100, "First frame speed is unrealistically high")
-
-        self.assertIn('shaftTorque_Nm', first_frame, "First frame is missing 'shaftTorque_Nm'")
-        self.assertIsNotNone(first_frame['shaftTorque_Nm'], "First frame torque is None")
-        self.assertGreater(first_frame['shaftTorque_Nm'], 0, "First frame torque should be positive")
-        self.assertLess(first_frame['shaftTorque_Nm'], 100, "First frame torque is unrealistically high")
-
-        self.assertIn('egoVelocity', first_frame, "First frame is missing 'egoVelocity'")
-        self.assertIsNotNone(first_frame['egoVelocity'][0], "First frame egoVx is None")
-        self.assertGreater(first_frame['egoVelocity'][0], 0, "First frame egoVx should be positive")
-
-        print(f"Startup race condition test finished successfully. Output files are in: {self.test_output_dir}")
+        """Runs the startup race condition test in an isolated process."""
+        self._run_test_in_subprocess('startup_race')
 
     def test_numpy_float64_corruption_fix(self):
-        """
-        Tests that a numpy.float64 value, which caused corruption, is now
-        handled correctly when passed through the multiprocessing shared dictionary.
-        """
-        manager = multiprocessing.Manager()
-        shared_live_can_data = manager.dict()
-        can_logger_ready = manager.Event()
-        shutdown_flag = manager.Event()
-
-        expected_values = {
-            'speed': np.float64(9.36),    # A value that was known to corrupt
-            'torque': np.float64(12.5),
-            'grade': np.float64(0.5)
-        }
-        expected_ego_vx_mps = expected_values['speed'] / 3.6
-
-        radar_log_path = 'tests/test_data/sample_data/radar_log.json'
-        self.assertTrue(os.path.exists(radar_log_path))
-
-        # Use the special numpy-based mock CAN logger
-        can_process = multiprocessing.Process(
-            target=mock_can_logger_numpy_process,
-            args=(shared_live_can_data, can_logger_ready, shutdown_flag, self.test_output_dir, expected_values)
-        )
-
-        num_frames = 30
-        radar_process = multiprocessing.Process(
-            target=mock_radar_tracker_process,
-            args=(shared_live_can_data, can_logger_ready, shutdown_flag, self.test_output_dir, num_frames, radar_log_path)
-        )
-
-        print("Starting Numpy Corruption Test...")
-        can_process.start()
-        radar_process.start()
-
-        can_process.join()
-        radar_process.join()
-
-        self.assertTrue(os.path.exists(self.track_history_file))
-        
-        with open(self.track_history_file, 'r') as f:
-            history = json.load(f)
-        
-        radar_frames = history['radarFrames']
-        self.assertGreater(len(radar_frames), 10, "Ensure enough frames were processed") # Ensure enough frames were processed
-
-        # Check the last frame for the correct, uncorrupted CAN data
-        last_frame = radar_frames[-1]
-        
-        self.assertIn('canVehSpeed_kmph', last_frame)
-        self.assertIsNotNone(last_frame['canVehSpeed_kmph'])
-        # This is the critical assertion: is the value correct or corrupted?
-        self.assertAlmostEqual(last_frame['canVehSpeed_kmph'], expected_values['speed'], delta=0.1, msg="Numpy float64 speed value was corrupted")
-
-        self.assertIn('shaftTorque_Nm', last_frame)
-        self.assertIsNotNone(last_frame['shaftTorque_Nm'])
-        self.assertAlmostEqual(last_frame['shaftTorque_Nm'], expected_values['torque'], delta=0.1, msg="Numpy float64 torque value was corrupted")
-
-        self.assertIn('roadGrade_Deg', last_frame)
-        self.assertIsNotNone(last_frame['roadGrade_Deg'])
-        self.assertAlmostEqual(last_frame['roadGrade_Deg'], expected_values['grade'], delta=0.1, msg="Numpy float64 grade value was corrupted")
-
-        print(f"Numpy corruption test finished successfully. Output files are in: {self.test_output_dir}")
+        """Runs the numpy float64 corruption test in an isolated process."""
+        self._run_test_in_subprocess('numpy_corruption')
 
     def test_imu_stuck_flag_ignores_grade(self):
-        """
-        Tests that when the 'ETS_VCU_imuProc_imuStuck_B' flag is set to 1,
-        the road grade is ignored by the tracker, resulting in a null value
-        in the final output.
-        """
-        manager = multiprocessing.Manager()
-        shared_live_can_data = manager.dict()
-        can_logger_ready = manager.Event()
-        shutdown_flag = manager.Event()
-
-        expected_values = {
-            'speed': 40.0,
-            'torque': 15.0,
-            'grade': 5.0  # A non-zero grade
-        }
-        
-        radar_log_path = 'tests/test_data/sample_data/radar_log.json'
-        self.assertTrue(os.path.exists(radar_log_path))
-
-        # The test data file only has ~16 frames.
-        num_frames = 15
-        flip_frame = 8 # The frame where the IMU stuck flag will be set to 1
-
-        # Use the new scenario-based mock CAN logger
-        can_process = multiprocessing.Process(
-            target=mock_can_logger_imu_stuck_scenario,
-            args=(shared_live_can_data, can_logger_ready, shutdown_flag, self.test_output_dir, expected_values, flip_frame)
-        )
-
-        radar_process = multiprocessing.Process(
-            target=mock_radar_tracker_process,
-            args=(shared_live_can_data, can_logger_ready, shutdown_flag, self.test_output_dir, num_frames, radar_log_path)
-        )
-
-        print("Starting IMU Stuck Flag Test...")
-        can_process.start()
-        radar_process.start()
-
-        can_process.join()
-        radar_process.join()
-
-        self.assertTrue(os.path.exists(self.track_history_file))
-        
-        with open(self.track_history_file, 'r') as f:
-            history = json.load(f)
-        
-        radar_frames = history['radarFrames']
-        self.assertGreaterEqual(len(radar_frames), num_frames - 5, "Not enough frames were processed")
-
-        # --- ROBUST VERIFICATION ---
-        # Find the first frame where the grade is null
-        first_null_idx = -1
-        for i, frame in enumerate(radar_frames):
-            if frame.get('roadGrade_Deg') is None:
-                first_null_idx = i
-                break
-        
-        # 1. Assert that the grade was not null from the very beginning
-        self.assertNotEqual(first_null_idx, 0, "Grade should not be null in the first frame.")
-        self.assertTrue(first_null_idx != -1, "Grade was never set to null, the feature did not work.")
-
-        # 2. Assert that the flip happened near the expected frame, allowing for some timing skew
-        self.assertTrue(flip_frame - 4 <= first_null_idx <= flip_frame + 4, 
-                        f"Grade became null at frame {first_null_idx}, which is too far from the expected flip frame of {flip_frame}.")
-
-        # 3. Assert that the frame right before the flip has a valid grade
-        frame_before = radar_frames[first_null_idx - 1]
-        self.assertIsNotNone(frame_before['roadGrade_Deg'], f"Grade should be valid in frame {first_null_idx - 1}, right before it became null.")
-        self.assertAlmostEqual(frame_before['roadGrade_Deg'], expected_values['grade'], delta=0.1)
-
-        print(f"IMU stuck flag test finished successfully. Grade became null at frame {first_null_idx}. Output files are in: {self.test_output_dir}")
+        """Runs the IMU stuck flag test in an isolated process."""
+        self._run_test_in_subprocess('imu_stuck')
 
 
-if __name__ == '__main__':
-    # Set the start method for multiprocessing
-    # 'fork' is the default on Linux, but 'spawn' is safer and more cross-platform
-    # 'fork' can cause issues with shared resources and threads.
-    try:
-        multiprocessing.set_start_method('spawn')
-    except RuntimeError:
-        # set_start_method can only be called once
-        pass
-    unittest.main()
+

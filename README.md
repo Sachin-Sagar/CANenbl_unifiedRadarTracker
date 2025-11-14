@@ -195,8 +195,12 @@ This section highlights recent key improvements and bug fixes.
 
 ## 10. Testing
 
-A unit test is available to perform a sanity check on the CAN service without requiring any connected hardware.
+The project includes a test suite to validate the CAN processing pipeline. The main test script is `tests/test_cases/test_dual_pipeline_simulation.py`, which simulates the entire dual-pipeline system using a pre-recorded log file.
+
+To run all tests, use the main test runner script:
 
 ```bash
-python -m unittest tests/test_can_service.py
+python3 tests/tests_main.py
 ```
+
+For more details on the test suite, refer to the documentation in the `tests/documentation` directory.

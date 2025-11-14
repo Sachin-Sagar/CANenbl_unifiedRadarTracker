@@ -1,5 +1,15 @@
 
 
+Part 35: Project Structure Clarification
+
+This project is the result of merging two separate projects: a radar tracker and a CAN logger. The initial plan was to create a new `src/can_service` directory for the refactored CAN logger code. However, this plan was modified during development.
+
+- **`src/can_logger_app`**: This directory contains the **active, up-to-date** code for the CAN logger application. It is launched as a separate process by the main application.
+- **`src/can_service`**: This directory is **deprecated** and contains outdated, unused code from the initial merge plan. It should not be referenced.
+- **`merge_plan.md`**: This document describes the original, outdated merge plan and is kept for historical reference only.
+
+All new development and bug fixes related to CAN logging should be applied to the `src/can_logger_app` directory.
+
 Part 33: Feature Add - Ignore Grade/IMU on "IMU Stuck" Flag
 The Goal
 To improve the robustness of the vehicle ego-motion estimation by ignoring potentially faulty CAN signals. When the vehicle's control unit indicates that its Inertial Measurement Unit (IMU) is malfunctioning (via the `ETS_VCU_imuProc_imuStuck_B` signal), the tracking algorithm should disregard the road grade and other IMU-derived data.

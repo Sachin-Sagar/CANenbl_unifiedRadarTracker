@@ -1,3 +1,5 @@
+# **NOTE: This document describes the initial plan for merging the radar tracker and CAN logger projects. The plan was later modified. The `can_logger_app` directory contains the final, active code for the CAN logger, and the `src/can_service` directory is deprecated and contains outdated code.**
+
 1. Project Goal
 
 We aim to combine your two projects: the unified-radar-tracker (which processes radar data) and the read_can_rt_strip (which logs CAN bus data). The final, merged project, CAN_enbl_unifiedRadarTracker, will enhance the radar tracker's live mode. It will run the CAN logger's logic in the background to read live CAN signals, decode them using your VCU.dbc file and master_sigList.txt, and then feed this real-time vehicle data directly into the radar tracker's processing function. This replaces the placeholder data previously used in the live radar mode.

@@ -1,91 +1,65 @@
-# Test Suite Documentation
+# Test Suite Technical Documentation
 
-This document describes the test suite for the `CANenbl_unifiedRadarTracker` project. The primary purpose of these tests is to validate the functionality and performance of the CAN logging and processing components, with a special focus on the dual-pipeline architecture.
+This document provides a detailed technical description of the test suite for the `CANenbl_unifiedRadarTracker` project, focusing on the architecture and purpose of the key test cases.
 
-## Test Scripts
+## Test Architecture Overview
 
-The main test scripts are located in the `tests/test_cases/` directory.
+The test suite is designed to validate the CAN logging and processing components, with a strong emphasis on the dual-pipeline architecture for handling high and low-frequency CAN messages. The tests are organized into several categories:
+
+1.  **Core Logic Simulation**: Tests that simulate the application's core data processing pipelines in a hardware-free environment.
+2.  **Live Pipeline Integration**: Tests that validate the integration between the CAN logger and the radar tracker using shared memory.
+3.  **Data Integrity**: Tests that check for race conditions and other data corruption issues in the multiprocessing architecture.
+
+All tests are run through the main interactive runner, `tests/tests_main.py`, which centralizes test output into a timestamped directory under `tests/output/`.
+
+## Key Test Scripts
 
 ### `test_dual_pipeline_simulation.py`
 
-*   **Purpose:** This is the most critical test for debugging the core CAN processing logic. It simulates the entire dual-pipeline system using a pre-recorded log file (`2w_sample.log`) instead of live hardware.
+*   **Purpose:** This is a critical test for debugging the core CAN processing logic. It simulates the entire dual-pipeline system using a pre-recorded log file (`2w_sample.log`) instead of live hardware.
 *   **Functionality:**
-    *   It reads a BusMaster `.log` file.
-    *   It acts as a dispatcher, sending CAN messages to either a high-frequency or low-frequency queue based on their message ID.
-    *   It starts two independent worker processes to consume these queues, mimicking the live application's architecture.
-    *   It verifies that the signals listed in `master_sigList.txt` are correctly decoded and processed by the appropriate worker.
-*   **Key Feature:** The script uses a special `_debug_processing_worker` function that generates detailed, separate log files for each pipeline (`worker_1_high_freq.log` and `worker_2_low_freq.log`). This allows for isolated analysis of each worker's behavior.
+    *   It reads a BusMaster `.log` file and dispatches messages to either a high-frequency or low-frequency queue based on their ID.
+    *   It starts two independent worker processes (`_debug_processing_worker`) to consume these queues, mimicking the live application's architecture.
+    *   It verifies that signals are correctly decoded and processed by the appropriate worker.
+*   **Key Feature:** The script uses a special `_debug_processing_worker` function that generates detailed, separate log files for each pipeline (e.g., `worker_1_high_freq.log`). These logs are now saved to the run-specific timestamped output directory (e.g., `tests/output/test_run_YYYYMMDD_HHMMSS/`).
 
-### `test_can_service.py`
+### `test_main_app_logic.py`
 
-*   **Purpose:** To run an integration test on an alternative or legacy version of the CAN handling logic, specifically the `LiveCANManager`.
-*   **Functionality:**
-    *   It uses mocks to create a virtual CAN bus that produces predictable messages.
-    *   It starts the `LiveCANManager` and allows it to process the mock messages.
-    *   It then verifies that the signal interpolation logic produces the correct value.
-
-### `test_can_log_playback.py`
-
-*   **Purpose:** This script is a utility module rather than a standalone test. Its main purpose is to provide a reliable way to parse CAN log files.
-*   **Functionality:** It contains the `parse_busmaster_log` function, which reads a raw `.log` file and converts each line into a structured `can.Message` object. This utility is used by `test_dual_pipeline_simulation.py` to feed the simulation.
-
-### `tests_main.py`
-
-*   **Purpose:** To act as a centralized test runner for the entire suite.
-*   **Functionality:** It uses Python's built-in `unittest` library to automatically discover and execute all test files matching the pattern `test_*.py` within the `test_cases` directory.
+*   **Purpose:** To perform a hardware-free integration test of the main application's *actual* dual-pipeline architecture, using the production code from `src/can_logger_app`.
+*   **Method:**
+    1.  The test runner (`tests/lib/main_app_logic_test_runner.py`) imports the `processing_worker` and `utils` directly from `src/can_logger_app`.
+    2.  It parses the `2w_sample.log` file and populates the high and low-frequency queues.
+    3.  It instantiates the full dual-pipeline system with separate worker pools for each queue.
+*   **Current Status:** **FAILING**. The test currently fails because the `logged_signals_set` remains empty, meaning the test harness is not correctly capturing the output from the worker processes. This indicates a bug in the test's implementation, not necessarily in the application code itself.
 
 ### `test_live_data_pipeline.py`
 
-*   **Purpose:** To validate the end-to-end data pipeline for live CAN signal integration into the radar tracking algorithm. This test simulates a CAN logger providing constant ego-motion data and a radar tracker processing this data along with radar frames loaded from a log file. It verifies that CAN signals are correctly passed, processed, and reflected in the final tracking output.
-*   **Current Problem:** The `trackHistory` within the final `track_history.json` is empty because the tracking logic does not propagate the CAN signal data into the track's history log. Due to the constraint of not modifying source code outside the `tests` folder, the test now verifies the integration of CAN data by inspecting the `radarFrames` section of the JSON output. This confirms that the CAN data correctly influences the tracker's ego-motion estimation (`egoVelocity` and `estimatedAcceleration_mps2`), even if it's not present in the final track history.
+*   **Purpose:** To validate the end-to-end data pipeline for live CAN signal integration into the radar tracking algorithm.
+*   **Functionality:** This test suite uses a `mock_can_logger_process` to write data into a shared dictionary and a `mock_radar_tracker_process` to read from it, simulating the real-world interaction between the two main components of the application. It verifies that CAN signals are correctly passed, processed, and reflected in the final tracking output.
+*   **Key Tests**:
+    *   `test_data_integrity_in_live_pipeline`: Ensures data flows correctly without corruption.
+    *   `test_startup_race_condition_fix`: Confirms the tracker waits for the CAN logger to be ready.
+    *   `test_imu_stuck_flag_ignores_grade`: Verifies the tracker handles the "IMU stuck" flag correctly.
 
-## Verifying the Dual-Pipeline Logic
+### `test_can_service.py`
 
-A critical bug was identified where the main application was unable to log low-frequency (100ms) signals, while high-frequency (10ms) signals were logged correctly. The initial investigation confirmed the dual-pipeline code in `src/can_logger_app` appeared logically correct, and the issue was traced to a missing `master_sigList.txt` file in the `input/` directory.
+*   **Purpose:** To run an integration test on a legacy version of the CAN handling logic (`LiveCANManager` from the deprecated `src/can_service` directory).
+*   **Current Status:** **FAILING**. The test fails because the interpolated speed value it calculates (2.0) does not match the expected value (4.0). As this test targets deprecated code, its failure is not a primary concern for current development.
 
-To confirm this fix without requiring live hardware, a temporary test script (`test_main_app_logic.py`) was created.
+### `tests_main.py`
 
-*   **Purpose:** To perform a hardware-free integration test of the main application's *actual* dual-pipeline architecture.
-*   **Method:**
-    1.  The test imported the `CANReader`, `processing_worker`, and `utils` directly from the `src/can_logger_app` module.
-    2.  It mocked the `can.interface.Bus` to play back messages from the `2w_sample.log` file.
-    3.  It instantiated the full dual-pipeline system: a `CANReader` dispatcher thread, a high-frequency queue and worker pool, and a low-frequency queue and worker pool.
-    4.  Each worker pool was given its correctly segregated list of signals to monitor, exactly as in the main application.
-*   **Result:** The test **passed**. It successfully logged both a known high-frequency signal (`ETS_MOT_ShaftTorque_Est_Nm`) and a known low-frequency signal (`ETS_VCU_VehSpeed_Act_kmph`).
-*   **Conclusion:** This test definitively proved that the root cause of the missing 100ms signals was the absent `master_sigList.txt` file. With the input file present, the main application's core logic for segregating and processing high and low-frequency signals works as designed. The temporary test was subsequently removed.
-
-
-## Worker Task Breakdown (`test_dual_pipeline_simulation.py`)
-
-The `test_dual_pipeline_simulation.py` script creates two specialized worker processes.
-
-### Worker 1: High-Frequency Pipeline
-
-*   **Input Queue:** `high_freq_raw_queue`
-*   **Messages:** Receives messages with IDs corresponding to a **10ms** cycle time.
-*   **Tasks:**
-    1.  Pulls a raw CAN message from its dedicated queue.
-    2.  Decodes the message using the `VCU.dbc` file.
-    3.  Checks the decoded signals against the `high_freq_monitored_signals` set.
-    4.  If a signal is in the monitored set, it puts a log entry into the shared `log_queue`.
-*   **Log File:** `tests/test_data/worker_1_high_freq.log`
-
-### Worker 2: Low-Frequency Pipeline
-
-*   **Input Queue:** `low_freq_raw_queue`
-*   **Messages:** Receives messages with IDs corresponding to a **100ms** cycle time.
-*   **Tasks:**
-    1.  Pulls a raw CAN message from its dedicated queue.
-    2.  Performs the same decoding process as the high-frequency worker.
-    3.  Compares the decoded signals against its unique list of low-frequency signals.
-    4.  If a match is found, it puts the data into the shared `log_queue`.
-*   **Log File:** `tests/test_data/worker_2_low_freq.log`
+*   **Purpose:** To act as a centralized, interactive test runner for the entire suite.
+*   **Functionality:**
+    *   Uses Python's `unittest` library to automatically discover all tests.
+    *   Presents an interactive menu to the user to select which test(s) to run.
+    *   Creates a unique timestamped directory for each run in `tests/output/` to store all test artifacts, including the console log.
+    *   Prints a final summary of test results.
 
 ## Debugging Notes
 
-### Missing Signals in Test Data
+### Missing Signals in Test Data (`test_dual_pipeline_simulation.py`)
 
-During debugging, it was discovered that the test `test_low_frequency_signals_are_processed` reports a warning that the signal `ETS_VCU_BrakePedal_Act_perc` is not found. This is expected behavior with the current test data.
+The test `test_low_frequency_signals_are_processed` may report that certain signals (e.g., `ETS_VCU_BrakePedal_Act_perc`) are not found. This is expected behavior.
 
-*   **Reason:** The configuration file `master_sigList.txt` lists `ETS_VCU_BrakePedal_Act_perc` as a signal to be monitored. However, the test log file `2w_sample.log` does not contain any CAN messages that include this specific signal.
-*   **Conclusion:** The test is functioning correctly. It is accurately reporting that a configured signal is not present in the provided data. This is a data-configuration mismatch, not a bug in the processing code.
+*   **Reason:** The configuration file `master_sigList.txt` lists these signals for monitoring, but the test log file `2w_sample.log` does not contain any CAN messages with those signals.
+*   **Conclusion:** The test is functioning correctly by reporting that a configured signal is not present in the provided data. This is a data-configuration mismatch, not a bug in the processing code.

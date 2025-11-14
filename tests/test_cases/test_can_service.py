@@ -24,60 +24,49 @@ class TestCANService(unittest.TestCase):
         with open(os.path.join(root_config.INPUT_DIRECTORY, root_config.SIGNAL_LIST_FILE), 'w') as f:
             f.write("0x8D00100,VCU_Speed,10\n")
 
-    @patch('can.interface.Bus')
-    def test_can_service_integration(self, mock_bus):
-        """Sanity check for the CAN service integration."""
-        
-        # --- Mocking the CAN Bus ---
-        mock_bus.return_value.recv.side_effect = [
-            can.Message(arbitration_id=0x8D00100, data=[0, 20, 0, 0, 0, 0, 0, 0], timestamp=time.time(), is_extended_id=True),
-            can.Message(arbitration_id=0x8D00100, data=[0, 40, 0, 0, 0, 0, 0, 0], timestamp=time.time() + 0.1, is_extended_id=True),
-            None
-        ]
+    def test_can_service_integration(self):
+        """
+        Sanity check for the CAN service integration.
+        This test runs its logic in a separate process to avoid a
+        PicklingError related to multiprocessing.Manager and the unittest runner.
+        """
+        import subprocess
 
-        # --- Setup LiveCANManager ---
-        dbc_path = os.path.join(root_config.INPUT_DIRECTORY, root_config.DBC_FILE)
-        signal_list_path = os.path.join(root_config.INPUT_DIRECTORY, root_config.SIGNAL_LIST_FILE)
+        runner_script_path = os.path.join(os.path.dirname(__file__), '..', 'lib', 'can_service_test_runner.py')
+        self.assertTrue(os.path.exists(runner_script_path), f"Test runner script not found at {runner_script_path}")
 
-        mock_config = MagicMock()
-        mock_config.DEBUG_PRINTING = False
-        mock_config.OS_SYSTEM = "Linux"
-        mock_config.CAN_CHANNEL = "can0"
-        mock_config.CAN_BITRATE = 500000
-        mock_config.CAN_INTERFACE = "socketcan"
+        try:
+            # Execute the test runner script in a clean python interpreter process.
+            # We use sys.executable to ensure it uses the same python environment.
+            # `check=True` will raise a CalledProcessError if the script returns a non-zero exit code.
+            result = subprocess.run(
+                [sys.executable, runner_script_path],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=20 # Add a timeout to prevent hangs
+            )
+            # Print the output from the script for debugging purposes, even on success
+            print("\n--- Subprocess Output ---")
+            print(result.stdout)
+            if result.stderr:
+                print("--- Subprocess Stderr ---")
+                print(result.stderr)
+            print("-------------------------\n")
 
-        with patch.dict('sys.modules', {'config': mock_config}):
-            import importlib
-            from src.can_service import utils, can_handler
-            importlib.reload(utils)
-            importlib.reload(can_handler)
-            from live_can_manager_fixed import LiveCANManager
-
-            can_manager = LiveCANManager(mock_config, dbc_path, signal_list_path)
-            can_manager.start()
-
-            time.sleep(0.5) # Give time for the CAN messages to be processed
-
-            # --- Mock RadarWorker getting data ---
-            radar_timestamp_ms = (time.time() + 0.05) * 1000
-            can_buffers = can_manager.get_signal_buffers()
-            
-            # --- Interpolation (simplified from RadarWorker) ---
-            interp_value = None
-            if 'VCU_Speed' in can_buffers:
-                # Need to import numpy for this test
-                import numpy as np
-                buffer = can_buffers['VCU_Speed']
-                timestamps = [item[0] for item in buffer]
-                values = [item[1] for item in buffer]
-                interp_value = np.interp(radar_timestamp_ms / 1000.0, timestamps, values)
-
-            # --- Assertions ---
-            self.assertIsNotNone(interp_value, "Interpolated value should not be None")
-            self.assertAlmostEqual(interp_value, 3.0, delta=1.0, msg="Interpolated speed should be close to 3.0")
-
-            # --- Shutdown ---
-            can_manager.stop()
+        except subprocess.CalledProcessError as e:
+            # The script exited with a non-zero code, meaning an assertion or other error occurred.
+            self.fail(
+                f"The isolated test process failed with exit code {e.returncode}.\n"
+                f"--- STDOUT ---\n{e.stdout}\n"
+                f"--- STDERR ---\n{e.stderr}"
+            )
+        except subprocess.TimeoutExpired as e:
+            self.fail(
+                f"The isolated test process timed out.\n"
+                f"--- STDOUT ---\n{e.stdout}\n"
+                f"--- STDERR ---\n{e.stderr}"
+            )
 
 if __name__ == '__main__':
     # Need to import numpy for the test
